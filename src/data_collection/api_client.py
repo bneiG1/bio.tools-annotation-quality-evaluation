@@ -1,0 +1,315 @@
+"""
+API client for retrieving tool data from bio.tools registry.
+"""
+
+import requests
+import time
+import logging
+from typing import Dict, List, Optional, Union
+from urllib.parse import urljoin, urlencode
+import json
+
+class BioToolsAPIClient:
+    """Client for interacting with the bio.tools API."""
+    
+    def __init__(self, base_url: str = "https://bio.tools/api/tool/",
+                 timeout: int = 30, retry_attempts: int = 3,
+                 delay_between_requests: float = 1.0):
+        """
+        Initialize the API client.
+        
+        Args:
+            base_url: Base URL for the bio.tools API
+            timeout: Request timeout in seconds
+            retry_attempts: Number of retry attempts for failed requests
+            delay_between_requests: Delay between requests in seconds
+        """
+        self.base_url = base_url
+        self.timeout = timeout
+        self.retry_attempts = retry_attempts
+        self.delay = delay_between_requests
+        self.session = requests.Session()
+        
+        # Set up logging
+        logging.basicConfig(level=logging.INFO)
+        self.logger = logging.getLogger(__name__)
+        
+        # Set headers
+        self.session.headers.update({
+            'User-Agent': 'bio.tools-quality-evaluation/1.0',
+            'Content-Type': 'application/json'
+        })
+    
+    def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
+        """
+        Make a request to the bio.tools API with retry logic.
+        
+        Args:
+            endpoint: API endpoint
+            params: Query parameters
+            
+        Returns:
+            JSON response as dictionary
+            
+        Raises:
+            requests.RequestException: If request fails after all retries
+        """
+        url = urljoin(self.base_url, endpoint)
+        
+        for attempt in range(self.retry_attempts):
+            try:
+                self.logger.debug(f"Making request to {url} (attempt {attempt + 1})")
+                response = self.session.get(url, params=params, timeout=self.timeout)
+                response.raise_for_status()
+                
+                # Add delay between requests to be respectful
+                time.sleep(self.delay)
+                
+                return response.json()
+                
+            except requests.exceptions.RequestException as e:
+                self.logger.warning(f"Request failed (attempt {attempt + 1}): {e}")
+                if attempt == self.retry_attempts - 1:
+                    raise
+                time.sleep(2 ** attempt)  # Exponential backoff
+    
+    def get_tool_by_id(self, tool_id: str) -> Optional[Dict]:
+        """
+        Retrieve a single tool by its biotoolsID.
+        
+        Args:
+            tool_id: The biotoolsID of the tool
+            
+        Returns:
+            Tool data as dictionary or None if not found
+        """
+        try:
+            return self._make_request(f"{tool_id}/")
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Failed to retrieve tool {tool_id}: {e}")
+            return None
+    
+    def get_tools_by_collection(self, collection: str, limit: int = 100,
+                               page: int = 1) -> List[Dict]:
+        """
+        Retrieve tools from a specific collection.
+        
+        Args:
+            collection: Collection name (e.g., 'proteomics')
+            limit: Maximum number of tools to retrieve
+            page: Page number for pagination
+            
+        Returns:
+            List of tool dictionaries
+        """
+        params = {
+            'collection': collection,
+            'page': page,
+            'page_size': min(limit, 100)  # API limit
+        }
+        
+        tools = []
+        current_page = page
+        
+        while len(tools) < limit:
+            params['page'] = current_page
+            try:
+                response = self._make_request("", params)
+                
+                if 'list' not in response:
+                    break
+                
+                page_tools = response['list']
+                if not page_tools:
+                    break
+                
+                tools.extend(page_tools)
+                
+                # Check if we have more pages
+                if len(page_tools) < params['page_size']:
+                    break
+                
+                current_page += 1
+                
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"Failed to retrieve tools from collection {collection}: {e}")
+                break
+        
+        return tools[:limit]
+    
+    def get_tools_by_topic(self, topic: str, limit: int = 100) -> List[Dict]:
+        """
+        Retrieve tools by topic.
+        
+        Args:
+            topic: Topic name (e.g., 'Proteomics')
+            limit: Maximum number of tools to retrieve
+            
+        Returns:
+            List of tool dictionaries
+        """
+        params = {
+            'topic': topic,
+            'page_size': min(limit, 100)
+        }
+        
+        tools = []
+        page = 1
+        
+        while len(tools) < limit:
+            params['page'] = page
+            try:
+                response = self._make_request("", params)
+                
+                if 'list' not in response:
+                    break
+                
+                page_tools = response['list']
+                if not page_tools:
+                    break
+                
+                tools.extend(page_tools)
+                
+                if len(page_tools) < params['page_size']:
+                    break
+                
+                page += 1
+                
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"Failed to retrieve tools by topic {topic}: {e}")
+                break
+        
+        return tools[:limit]
+    
+    def search_tools(self, query: str, limit: int = 100) -> List[Dict]:
+        """
+        Search for tools using a query string.
+        
+        Args:
+            query: Search query
+            limit: Maximum number of tools to retrieve
+            
+        Returns:
+            List of tool dictionaries
+        """
+        params = {
+            'q': query,
+            'page_size': min(limit, 100)
+        }
+        
+        tools = []
+        page = 1
+        
+        while len(tools) < limit:
+            params['page'] = page
+            try:
+                response = self._make_request("", params)
+                
+                if 'list' not in response:
+                    break
+                
+                page_tools = response['list']
+                if not page_tools:
+                    break
+                
+                tools.extend(page_tools)
+                
+                if len(page_tools) < params['page_size']:
+                    break
+                
+                page += 1
+                
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"Failed to search tools with query '{query}': {e}")
+                break
+        
+        return tools[:limit]
+    
+    def get_all_tools(self, limit: int = 1000) -> List[Dict]:
+        """
+        Retrieve all tools from the registry.
+        
+        Args:
+            limit: Maximum number of tools to retrieve
+            
+        Returns:
+            List of tool dictionaries
+        """
+        params = {'page_size': min(100, limit)}
+        
+        tools = []
+        page = 1
+        
+        while len(tools) < limit:
+            params['page'] = page
+            try:
+                response = self._make_request("", params)
+                
+                if 'list' not in response:
+                    break
+                
+                page_tools = response['list']
+                if not page_tools:
+                    break
+                
+                tools.extend(page_tools)
+                self.logger.info(f"Retrieved {len(tools)} tools so far...")
+                
+                if len(page_tools) < params['page_size']:
+                    break
+                
+                page += 1
+                
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"Failed to retrieve all tools: {e}")
+                break
+        
+        return tools[:limit]
+    
+    def get_tool_statistics(self) -> Dict:
+        """
+        Get basic statistics about the bio.tools registry.
+        
+        Returns:
+            Dictionary containing registry statistics
+        """
+        try:
+            response = self._make_request("stats/")
+            return response
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Failed to retrieve tool statistics: {e}")
+            return {}
+    
+    def save_tools_to_file(self, tools: List[Dict], filename: str):
+        """
+        Save tools data to a JSON file.
+        
+        Args:
+            tools: List of tool dictionaries
+            filename: Output filename
+        """
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(tools, f, indent=2, ensure_ascii=False)
+            self.logger.info(f"Saved {len(tools)} tools to {filename}")
+        except Exception as e:
+            self.logger.error(f"Failed to save tools to file: {e}")
+    
+    def load_tools_from_file(self, filename: str) -> List[Dict]:
+        """
+        Load tools data from a JSON file.
+        
+        Args:
+            filename: Input filename
+            
+        Returns:
+            List of tool dictionaries
+        """
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                tools = json.load(f)
+            self.logger.info(f"Loaded {len(tools)} tools from {filename}")
+            return tools
+        except Exception as e:
+            self.logger.error(f"Failed to load tools from file: {e}")
+            return []

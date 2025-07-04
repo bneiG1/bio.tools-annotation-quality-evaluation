@@ -1,0 +1,139 @@
+scoring:
+  # Weights for different aspects of tool annotation quality
+  weights:
+    basic_info: 20        # Name, description, homepage, biotoolsID
+    detailed_description: 15  # Function, topic, operation
+    technical_details: 25    # Version, language, OS, license
+    documentation: 20       # Documentation links, publications
+    accessibility: 10       # Download links, repositories
+    community: 10          # Credits, contact information
+
+  # Tier thresholds (percentage scores)
+  tiers:
+    tier_1: [0, 20]      # Minimal annotation
+    tier_2: [21, 40]     # Basic annotation
+    tier_3: [41, 60]     # Moderate annotation
+    tier_4: [61, 80]     # Good annotation
+    tier_5: [81, 100]    # Excellent annotation
+
+  # Field importance mapping (aligned with Tool Information Standards)
+  field_weights:
+    # Basic Information (20%)
+    name: 3
+    description: 5
+    homepage: 3
+    biotoolsID: 2
+    biotoolsCURIE: 2
+    version: 5
+    
+    # Detailed Description (15%)
+    function: 5
+    topic: 5
+    operation: 5
+    
+    # Technical Details (25%)
+    toolType: 4
+    language: 3
+    operatingSystem: 3
+    license: 4
+    maturity: 3
+    cost: 3
+    accessibility: 5
+    
+    # Documentation (20%)
+    documentation: 6
+    publication: 8
+    publicationsPrimaryID: 6
+    
+    # Accessibility (10%)
+    download: 5
+    link: 3
+    repository: 2
+    
+    # Community (10%)
+    credit: 4
+    contact: 6
+
+  # Minimum required fields for each tier
+  tier_requirements:
+    tier_1:
+      - name
+      - description
+      - homepage
+    tier_2:
+      - name
+      - description
+      - homepage
+      - function
+      - topic
+    tier_3:
+      - name
+      - description
+      - homepage
+      - function
+      - topic
+      - operation
+      - toolType
+    tier_4:
+      - name
+      - description
+      - homepage
+      - function
+      - topic
+      - operation
+      - toolType
+      - language
+      - license
+      - documentation
+    tier_5:
+      - name
+      - description
+      - homepage
+      - function
+      - topic
+      - operation
+      - toolType
+      - language
+      - license
+      - documentation
+      - publication
+      - contact
+      - download
+
+api:
+  base_url: "https://bio.tools/api/tool"
+  timeout: 30
+  retry_attempts: 3
+  delay_between_requests: 1
+
+linter:
+  # bio.tools linter configuration
+  error_weights:
+    critical: 10
+    major: 5
+    minor: 2
+    warning: 1
+  
+  # Common error patterns to track
+  error_patterns:
+    - "missing_required_field"
+    - "invalid_format"
+    - "invalid_url"
+    - "invalid_doi"
+    - "invalid_license"
+    - "invalid_language"
+    - "invalid_operating_system"
+
+collections:
+  # Predefined collections for analysis
+  proteomics:
+    topic: "Proteomics"
+    description: "Tools for protein analysis"
+  
+  genomics:
+    topic: "Genomics"
+    description: "Tools for genome analysis"
+  
+  structural_biology:
+    topic: "Structural biology"
+    description: "Tools for structural analysis"
