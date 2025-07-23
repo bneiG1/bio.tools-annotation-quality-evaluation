@@ -1,186 +1,85 @@
-# Systematic Evaluation and Enhancement of bio.tools Annotation Quality
+# Project 2: Systematic Evaluation and Enhancement of bio.tools Annotation Quality
 
 ## Overview
+The **quality of metadata** in the [ELIXIR bio.tools](https://bio.tools) registry directly impacts its usability for **end users** and **developers**. However, the **completeness and consistency** of tool annotations vary significantly.  
 
-The quality of metadata in the ELIXIR bio.tools registry affects its usability for both end users and developers. However, the completeness and consistency of tool annotations vary significantly. This project investigates the current state of metadata quality and proposes a systematic framework to assess and improve it.
+This project investigates the **current state of metadata quality** and proposes a **systematic framework** to assess and improve it. By combining:
+- **Scoring** aligned with the [Tool Information Standards](https://bio-tools.github.io/Tool-Information-Standards/use_cases.html)  
+- **Validation** against the [bio.tools Schema](https://github.com/bio-tools/biotoolsschema)  
+- **Automated diagnostics** using the [bio.tools linter](https://github.com/3top1a/biotools-linter/tree/main)  
 
-## Project Structure
+…the project identifies common deficiencies and suggests refinements to both the metadata and the underlying standards.  
+Ultimately, this work aims to **support the creation of a more reliable and robust tool registry**.
 
-```
-bio.tools-annotation-quality-evaluation/
-├── README.md
-├── requirements.txt
-├── config/
-│   ├── scoring_config.yaml
-│   └── biotoolsschema.json
-├── src/
-│   ├── __init__.py
-│   ├── data_collection/
-│   │   ├── __init__.py
-│   │   ├── api_client.py
-│   │   └── data_parser.py
-│   ├── scoring/
-│   │   ├── __init__.py
-│   │   ├── completeness_scorer.py
-│   │   └── tier_classifier.py
-│   ├── linter/
-│   │   ├── __init__.py
-│   │   ├── linter_integration.py
-│   │   └── error_analyzer.py
-│   ├── analysis/
-│   │   ├── __init__.py
-│   │   ├── statistics.py
-│   │   └── pattern_analysis.py
-│   └── visualization/
-│       ├── __init__.py
-│       ├── charts.py
-│       └── reports.py
-├── tests/
-│   ├── __init__.py
-│   ├── test_data_collection.py
-│   ├── test_scoring.py
-│   └── test_analysis.py
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── reports/
-├── notebooks/
-│   ├── exploration.ipynb
-│   ├── analysis.ipynb
-│   └── visualization.ipynb
-└── scripts/
-    ├── run_evaluation.py
-    └── generate_reports.py
-```
+---
 
-## Key Components
+## Project Scope
+This project will design and implement a **semi-automated workflow** that:
 
-### 1. Data Collection
-- **API Client**: Retrieves tool entries from the bio.tools API
-- **Data Parser**: Parses JSON metadata and validates against schema
+1. **Assesses metadata completeness** of bio.tools entries using Tool Information Standards and biotoolsSchema.
+2. **Applies a tier-based scoring system** (1–5 tiers) to classify tools by metadata richness.
+3. **Integrates bio.tools linter results** to identify structural and syntactic issues.
+4. **Summarizes completeness statistics** across selected tool collections (e.g., [proteomics tools](https://bio.tools/domains)).
+5. **Generates visual reports** (radar charts, heatmaps) to communicate findings.
+6. **Proposes refinements** to the Tool Information Standards based on empirical evidence.
 
-### 2. Scoring System
-- **Completeness Scorer**: Implements tier-based scoring system (1-5)
-- **Tier Classifier**: Maps Tool Information Standards to scoring metrics
+> **Note:** The project can be divided into **two collaborative sub-projects**:
+- **Scoring completeness and tier classification**
+- **Analyzing and integrating linter outputs**
 
-### 3. Linter Integration
-- **Linter Integration**: Processes bio.tools linter results
-- **Error Analyzer**: Identifies recurring structural issues
-
-### 4. Analysis & Visualization
-- **Statistics**: Generates completeness metrics per tier and domain
-- **Pattern Analysis**: Identifies frequently missing attributes
-- **Charts**: Creates radar charts, heatmaps, and visual summaries
-- **Reports**: Generates comprehensive evaluation reports
-
-## Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/your-repo/bio.tools-annotation-quality-evaluation.git
-cd bio.tools-annotation-quality-evaluation
-```
-
-2. Create a virtual environment:
-```bash
-python -m venv venv
-venv\Scripts\activate  # On Windows
-# source venv/bin/activate  # On Linux/Mac
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-## Usage
-
-### Quick Start
-
-1. Run the complete evaluation pipeline:
-```bash
-python scripts/run_evaluation.py --collection proteomics --limit 100
-```
-
-2. Generate reports:
-```bash
-python scripts/generate_reports.py --input data/processed/results.json --output data/reports/
-```
-
-### Custom Analysis
-
-```python
-from src.data_collection.api_client import BioToolsAPIClient
-from src.scoring.completeness_scorer import CompletenessScorer
-from src.visualization.charts import QualityVisualizer
-
-# Initialize components
-client = BioToolsAPIClient()
-scorer = CompletenessScorer()
-visualizer = QualityVisualizer()
-
-# Collect data
-tools = client.get_tools_by_collection("proteomics", limit=50)
-
-# Score tools
-results = scorer.score_tools(tools)
-
-# Generate visualizations
-visualizer.create_tier_distribution_chart(results)
-visualizer.create_completeness_heatmap(results)
-```
-
-## Configuration
-
-The scoring system can be customized through `config/scoring_config.yaml`:
-
-```yaml
-scoring:
-  weights:
-    basic_info: 20
-    detailed_description: 15
-    technical_details: 25
-    documentation: 20
-    accessibility: 10
-    community: 10
-  
-  tiers:
-    tier_1: 0-20
-    tier_2: 21-40
-    tier_3: 41-60
-    tier_4: 61-80
-    tier_5: 81-100
-```
+---
 
 ## Key Objectives
+- Implement a **scoring pipeline** for annotation quality tiers.
+- Analyze **completeness trends** across tool collections and domains.
+- Identify **frequently missing or malformed attributes**.
+- Propose **revisions** to the Tool Information Standards.
+- Combine **linter diagnostics** with the scoring framework.
 
-1. **Implement a scoring pipeline** to classify tools into annotation quality tiers
-2. **Analyze completeness patterns** across tool collections and domains
-3. **Identify frequently missing attributes** and structural issues
-4. **Propose revisions** to the Tool Information Standards
-5. **Integrate linter output** into the quality assessment framework
+---
+
+## Methodology
+
+### 1. Data Collection
+- Retrieve tool entries from the [bio.tools API](https://bio.tools/api) or curated subsets (e.g., proteomics).
+- Validate metadata using **JSON schema parsing**.
+
+### 2. Tier-Based Scoring
+- Map the **Tool Information Standards** to a scoring rubric.
+- Assign each tool a **completeness score** and **tier (1–5)**.
+- Identify fields that are most commonly missing or inconsistent.
+
+### 3. Linter Integration
+- Run the [bio.tools linter](https://github.com/3top1a/biotools-linter) on selected tools.
+- Parse errors and warnings for recurring issues.
+- Merge **linter results** with **scoring metrics**.
+
+### 4. Revision Proposal
+- Recommend **clarifications or modifications** to Tool Information Standards.
+- Summarize **critical attributes** that are frequently neglected or problematic.
+
+---
 
 ## Expected Outcomes
+1. A **scoring and analysis pipeline** for bio.tools metadata evaluation.
+2. A **revised version** of the Tool Information Standards tailored to current needs.
+3. **Visual and tabular reports** (radar charts, heatmaps) showing completeness metrics by tier and domain.
+4. An **integrated dataset** combining metadata, linter results, and scoring.
 
-- A comprehensive scoring and analysis pipeline for bio.tools metadata evaluation
-- Visual and tabular reports highlighting completeness metrics per tier and domain
-- An integrated dataset combining scoring, linter results, and tool metadata
-- A revised version of the Tool Information Standards based on empirical findings
+---
 
-## Contributing
+## Prerequisites
+- **Basic Python programming** skills
+- Experience with **JSON handling and schema validation**
+- Interest in **metadata quality and scientific registries**
+- Familiarity with **data visualization** tools (e.g., matplotlib, seaborn)
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+---
 
-## License
+## Learning Goals
+- Learn to **apply quality metrics** to large-scale scientific metadata.
+- Gain experience in **schema validation and structured data assessment**.
+- Understand **metadata curation challenges** in open scientific registries.
+- Contribute to the **evolution of community-driven metadata standards**.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- ELIXIR bio.tools registry team
-- Tool Information Standards working group
-- biotoolsSchema contributors
+---

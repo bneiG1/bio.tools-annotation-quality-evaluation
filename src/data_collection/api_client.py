@@ -12,7 +12,7 @@ import json
 class BioToolsAPIClient:
     """Client for interacting with the bio.tools API."""
     
-    def __init__(self, base_url: str = "https://bio.tools/api/tool/",
+    def __init__(self, base_url: str = "https://bio.tools/api/tool/?format=json",
                  timeout: int = 30, retry_attempts: int = 3,
                  delay_between_requests: float = 1.0):
         """
@@ -37,7 +37,7 @@ class BioToolsAPIClient:
         # Set headers
         self.session.headers.update({
             'User-Agent': 'bio.tools-quality-evaluation/1.0',
-            'Content-Type': 'application/json'
+            'Accept': 'application/json'
         })
     
     def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
@@ -55,6 +55,11 @@ class BioToolsAPIClient:
             requests.RequestException: If request fails after all retries
         """
         url = urljoin(self.base_url, endpoint)
+        
+        # Ensure we get JSON format
+        if params is None:
+            params = {}
+        params['format'] = 'json'
         
         for attempt in range(self.retry_attempts):
             try:
