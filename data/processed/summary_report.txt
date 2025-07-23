@@ -1,0 +1,34 @@
+bio.tools Annotation Quality Evaluation Summary
+==================================================
+
+Analysis Date: 2025-07-24T00:57:53.198134
+Total Tools Analyzed: 30515
+
+BASIC STATISTICS
+--------------------
+Average Score: 47.85
+Median Score: 46.71
+Standard Deviation: 9.96
+Score Range: 15.00 - 92.00
+
+TIER DISTRIBUTION
+--------------------
+Tier 1: 1759 tools (5.8%)
+Tier 2: 6073 tools (19.9%)
+Tier 3: 20059 tools (65.7%)
+Tier 4: 2561 tools (8.4%)
+Tier 5: 63 tools (0.2%)
+
+MOST COMMONLY MISSING FIELDS
+------------------------------
+maturity: 26312 tools
+version: 24153 tools
+accessibility: 21516 tools
+cost: 20057 tools
+license: 16709 tools
+operatingSystem: 10468 tools
+language: 10061 tools
+toolType: 3479 tools
+
+TIER UPGRADE OPPORTUNITIES
+------------------------------

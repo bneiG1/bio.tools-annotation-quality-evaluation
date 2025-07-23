@@ -75,8 +75,12 @@ class BioToolsAPIClient:
             except requests.exceptions.RequestException as e:
                 self.logger.warning(f"Request failed (attempt {attempt + 1}): {e}")
                 if attempt == self.retry_attempts - 1:
+                    # Re-raise the exception on final attempt
                     raise
                 time.sleep(2 ** attempt)  # Exponential backoff
+        
+        # This should never be reached due to the raise above, but satisfy type checker
+        raise requests.exceptions.RequestException("All retry attempts failed")
     
     def get_tool_by_id(self, tool_id: str) -> Optional[Dict]:
         """
@@ -107,10 +111,11 @@ class BioToolsAPIClient:
         Returns:
             List of tool dictionaries
         """
+        # Use bio.tools API page size (50 per page)
+        page_size = 50
         params = {
             'collection': collection,
-            'page': page,
-            'page_size': min(limit, 100)  # API limit
+            'page_size': page_size
         }
         
         tools = []
@@ -122,16 +127,25 @@ class BioToolsAPIClient:
                 response = self._make_request("", params)
                 
                 if 'list' not in response:
+                    self.logger.warning(f"No 'list' key in response: {response}")
                     break
                 
                 page_tools = response['list']
                 if not page_tools:
+                    self.logger.info(f"No more tools available for collection '{collection}', stopping at page {current_page}")
                     break
                 
                 tools.extend(page_tools)
+                self.logger.info(f"Retrieved {len(tools)} tools so far for collection '{collection}'... (page {current_page}, got {len(page_tools)} tools this page)")
                 
-                # Check if we have more pages
-                if len(page_tools) < params['page_size']:
+                # Check if we have more pages available
+                total_count = response.get('count', 0)
+                if total_count > 0:
+                    self.logger.info(f"Total tools available for collection '{collection}': {total_count}")
+                
+                # Continue to next page if we haven't hit our limit and there might be more data
+                if len(tools) >= total_count:
+                    self.logger.info(f"Retrieved all available tools for collection '{collection}' ({len(tools)})")
                     break
                 
                 current_page += 1
@@ -140,7 +154,9 @@ class BioToolsAPIClient:
                 self.logger.error(f"Failed to retrieve tools from collection {collection}: {e}")
                 break
         
-        return tools[:limit]
+        final_tools = tools[:limit]
+        self.logger.info(f"Returning {len(final_tools)} tools for collection '{collection}' (requested limit: {limit})")
+        return final_tools
     
     def get_tools_by_topic(self, topic: str, limit: int = 100) -> List[Dict]:
         """
@@ -153,9 +169,11 @@ class BioToolsAPIClient:
         Returns:
             List of tool dictionaries
         """
+        # Use bio.tools API page size (50 per page)
+        page_size = 50
         params = {
             'topic': topic,
-            'page_size': min(limit, 100)
+            'page_size': page_size
         }
         
         tools = []
@@ -167,15 +185,25 @@ class BioToolsAPIClient:
                 response = self._make_request("", params)
                 
                 if 'list' not in response:
+                    self.logger.warning(f"No 'list' key in response: {response}")
                     break
                 
                 page_tools = response['list']
                 if not page_tools:
+                    self.logger.info(f"No more tools available for topic '{topic}', stopping at page {page}")
                     break
                 
                 tools.extend(page_tools)
+                self.logger.info(f"Retrieved {len(tools)} tools so far for topic '{topic}'... (page {page}, got {len(page_tools)} tools this page)")
                 
-                if len(page_tools) < params['page_size']:
+                # Check if we have more pages available
+                total_count = response.get('count', 0)
+                if total_count > 0:
+                    self.logger.info(f"Total tools available for topic '{topic}': {total_count}")
+                
+                # Continue to next page if we haven't hit our limit and there might be more data
+                if len(tools) >= total_count:
+                    self.logger.info(f"Retrieved all available tools for topic '{topic}' ({len(tools)})")
                     break
                 
                 page += 1
@@ -184,7 +212,9 @@ class BioToolsAPIClient:
                 self.logger.error(f"Failed to retrieve tools by topic {topic}: {e}")
                 break
         
-        return tools[:limit]
+        final_tools = tools[:limit]
+        self.logger.info(f"Returning {len(final_tools)} tools for topic '{topic}' (requested limit: {limit})")
+        return final_tools
     
     def search_tools(self, query: str, limit: int = 100) -> List[Dict]:
         """
@@ -197,9 +227,11 @@ class BioToolsAPIClient:
         Returns:
             List of tool dictionaries
         """
+        # Use bio.tools API page size (50 per page)
+        page_size = 50
         params = {
             'q': query,
-            'page_size': min(limit, 100)
+            'page_size': page_size
         }
         
         tools = []
@@ -211,15 +243,25 @@ class BioToolsAPIClient:
                 response = self._make_request("", params)
                 
                 if 'list' not in response:
+                    self.logger.warning(f"No 'list' key in response: {response}")
                     break
                 
                 page_tools = response['list']
                 if not page_tools:
+                    self.logger.info(f"No more tools available for query '{query}', stopping at page {page}")
                     break
                 
                 tools.extend(page_tools)
+                self.logger.info(f"Retrieved {len(tools)} tools so far for query '{query}'... (page {page}, got {len(page_tools)} tools this page)")
                 
-                if len(page_tools) < params['page_size']:
+                # Check if we have more pages available
+                total_count = response.get('count', 0)
+                if total_count > 0:
+                    self.logger.info(f"Total tools available for query '{query}': {total_count}")
+                
+                # Continue to next page if we haven't hit our limit and there might be more data
+                if len(tools) >= total_count:
+                    self.logger.info(f"Retrieved all available tools for query '{query}' ({len(tools)})")
                     break
                 
                 page += 1
@@ -228,7 +270,9 @@ class BioToolsAPIClient:
                 self.logger.error(f"Failed to search tools with query '{query}': {e}")
                 break
         
-        return tools[:limit]
+        final_tools = tools[:limit]
+        self.logger.info(f"Returning {len(final_tools)} tools for query '{query}' (requested limit: {limit})")
+        return final_tools
     
     def get_all_tools(self, limit: int = 1000) -> List[Dict]:
         """
@@ -240,7 +284,9 @@ class BioToolsAPIClient:
         Returns:
             List of tool dictionaries
         """
-        params = {'page_size': min(100, limit)}
+        # Start with API's maximum page size - bio.tools API returns 50 per page
+        page_size = 50
+        params = {'page_size': page_size}
         
         tools = []
         page = 1
@@ -251,16 +297,25 @@ class BioToolsAPIClient:
                 response = self._make_request("", params)
                 
                 if 'list' not in response:
+                    self.logger.warning(f"No 'list' key in response: {response}")
                     break
                 
                 page_tools = response['list']
                 if not page_tools:
+                    self.logger.info(f"No more tools available, stopping at page {page}")
                     break
                 
                 tools.extend(page_tools)
-                self.logger.info(f"Retrieved {len(tools)} tools so far...")
+                self.logger.info(f"Retrieved {len(tools)} tools so far... (page {page}, got {len(page_tools)} tools this page)")
                 
-                if len(page_tools) < params['page_size']:
+                # Check if we have more pages available
+                total_count = response.get('count', 0)
+                if total_count > 0:
+                    self.logger.info(f"Total tools available in registry: {total_count}")
+                
+                # Continue to next page if we haven't hit our limit and there might be more data
+                if len(tools) >= total_count:
+                    self.logger.info(f"Retrieved all available tools ({len(tools)})")
                     break
                 
                 page += 1
@@ -269,7 +324,9 @@ class BioToolsAPIClient:
                 self.logger.error(f"Failed to retrieve all tools: {e}")
                 break
         
-        return tools[:limit]
+        final_tools = tools[:limit]
+        self.logger.info(f"Returning {len(final_tools)} tools (requested limit: {limit})")
+        return final_tools
     
     def get_tool_statistics(self) -> Dict:
         """

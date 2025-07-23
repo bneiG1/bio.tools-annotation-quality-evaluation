@@ -47,6 +47,27 @@ class QualityVisualizer:
             'community': '#8c564b'
         }
     
+    def _safe_save_plotly(self, fig: go.Figure, save_path: str) -> None:
+        """
+        Safely save a Plotly figure as HTML.
+        PNG export disabled due to Kaleido reliability issues on Windows.
+        
+        Args:
+            fig: Plotly figure to save
+            save_path: Path for HTML file
+        """
+        try:
+            # Save HTML version (reliable, doesn't require kaleido)
+            fig.write_html(save_path)
+            self.logger.info(f"Saved HTML visualization: {save_path}")
+            
+            # Skip PNG generation to avoid Kaleido hanging issues
+            self.logger.debug("PNG export skipped to avoid Kaleido issues")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save visualization: {e}")
+            raise
+    
     def create_tier_distribution_chart(self, results: List[Dict[str, Any]], 
                                      save_path: Optional[str] = None) -> go.Figure:
         """
@@ -100,8 +121,7 @@ class QualityVisualizer:
         )
         
         if save_path:
-            fig.write_html(save_path)
-            fig.write_image(save_path.replace('.html', '.png'))
+            self._safe_save_plotly(fig, save_path)
         
         return fig
     
@@ -152,8 +172,7 @@ class QualityVisualizer:
         )
         
         if save_path:
-            fig.write_html(save_path)
-            fig.write_image(save_path.replace('.html', '.png'))
+            self._safe_save_plotly(fig, save_path)
         
         return fig
     
@@ -239,8 +258,7 @@ class QualityVisualizer:
         )
         
         if save_path:
-            fig.write_html(save_path)
-            fig.write_image(save_path.replace('.html', '.png'))
+            self._safe_save_plotly(fig, save_path)
         
         return fig
     
@@ -293,8 +311,7 @@ class QualityVisualizer:
         )
         
         if save_path:
-            fig.write_html(save_path)
-            fig.write_image(save_path.replace('.html', '.png'))
+            self._safe_save_plotly(fig, save_path)
         
         return fig
     
@@ -375,8 +392,7 @@ class QualityVisualizer:
         fig.update_yaxes(title_text='Average Score', range=[0, 100])
         
         if save_path:
-            fig.write_html(save_path)
-            fig.write_image(save_path.replace('.html', '.png'))
+            self._safe_save_plotly(fig, save_path)
         
         return fig
     
@@ -471,8 +487,7 @@ class QualityVisualizer:
         )
         
         if save_path:
-            fig.write_html(save_path)
-            fig.write_image(save_path.replace('.html', '.png'))
+            self._safe_save_plotly(fig, save_path)
         
         return fig
     
@@ -579,7 +594,6 @@ class QualityVisualizer:
         )
         
         if save_path:
-            fig.write_html(save_path)
-            fig.write_image(save_path.replace('.html', '.png'))
+            self._safe_save_plotly(fig, save_path)
         
         return fig
