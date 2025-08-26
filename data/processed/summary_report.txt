@@ -1,34 +1,38 @@
 bio.tools Annotation Quality Evaluation Summary
 ==================================================
 
-Analysis Date: 2025-07-24T00:57:53.198134
-Total Tools Analyzed: 30515
+Analysis Date: 2025-08-26T15:59:12.457781
+Total Tools Analyzed: 30533
+Data Source: local
+Local Storage Enabled: True
+URL Accessibility Checking: Disabled
 
 BASIC STATISTICS
 --------------------
-Average Score: 47.85
-Median Score: 46.71
-Standard Deviation: 9.96
-Score Range: 15.00 - 92.00
+Average Score: 57.74
+Median Score: 57.26
+Standard Deviation: 9.50
+Score Range: 19.09 - 99.00
 
 TIER DISTRIBUTION
 --------------------
-Tier 1: 1759 tools (5.8%)
-Tier 2: 6073 tools (19.9%)
-Tier 3: 20059 tools (65.7%)
-Tier 4: 2561 tools (8.4%)
-Tier 5: 63 tools (0.2%)
+Tier 1: 1325 tools (4.3%)
+Tier 2: 5118 tools (16.8%)
+Tier 3: 23293 tools (76.3%)
+Tier 4: 769 tools (2.5%)
+Tier 5: 28 tools (0.1%)
 
 MOST COMMONLY MISSING FIELDS
 ------------------------------
-maturity: 26312 tools
-version: 24153 tools
-accessibility: 21516 tools
-cost: 20057 tools
-license: 16709 tools
-operatingSystem: 10468 tools
-language: 10061 tools
-toolType: 3479 tools
+maturity: 26321 tools
+version: 24161 tools
+accessibility: 21523 tools
+cost: 20064 tools
+license: 16713 tools
+operatingSystem: 10478 tools
+language: 10069 tools
+toolType: 3486 tools
 
 TIER UPGRADE OPPORTUNITIES
 ------------------------------
+tier_3_to_4: 1789 tools

@@ -6,5 +6,5 @@ of bio.tools annotation quality.
 """
 
 __version__ = "1.0.0"
-__author__ = "bio.tools Quality Evaluation Team"
-__email__ = "support@bio.tools"
+__author__ = "Goga Iosif-Beniamin"
+__email__ = "iosif.goga01@e-uvt.ro"

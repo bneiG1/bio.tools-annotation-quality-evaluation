@@ -1,104 +1,278 @@
 scoring:
-  # Weights for different aspects of tool annotation quality
+  # Weights for different aspects of tool annotation quality (based on tier requirements from image)
   weights:
-    basic_info: 20        # Name, description, homepage, biotoolsID
-    detailed_description: 15  # Function, topic, operation
-    technical_details: 25    # Version, language, OS, license
-    documentation: 20       # Documentation links, publications
-    accessibility: 10       # Download links, repositories
-    community: 10          # Credits, contact information
+    basic_info: 20         # Name, description, homepage, unique ID (SPARSE tier foundation)
+    core_metadata: 30      # Tool type, topics, publications, support (BASIC DETAILS)
+    technical_info: 25     # Operations, documentation, OS, language, license (DETAILED)
+    accessibility: 15      # Input/output, accessibility, code availability, downloads (HIGHLY DETAILED)
+    advanced_features: 10  # Additional features for COMPREHENSIVE tier
 
-  # Tier thresholds (percentage scores)
+  # Tier thresholds aligned with image criteria
   tiers:
-    tier_1: [0, 20]      # Minimal annotation
-    tier_2: [21, 40]     # Basic annotation
-    tier_3: [41, 60]     # Moderate annotation
-    tier_4: [61, 80]     # Good annotation
-    tier_5: [81, 100]    # Excellent annotation
+    tier_1: [0, 20]      # SPARSE - minimal viable entry
+    tier_2: [21, 50]     # BASIC DETAILS - essential metadata
+    tier_3: [51, 75]     # DETAILED - comprehensive core information
+    tier_4: [76, 90]     # HIGHLY DETAILED - rich metadata for discoverability
+    tier_5: [91, 100]    # COMPREHENSIVE - complete tool profile
 
-  # Field importance mapping (aligned with Tool Information Standards)
+  # Field importance mapping based on image tier requirements
   field_weights:
-    # Basic Information (20%)
-    name: 3
-    description: 5
-    homepage: 3
-    biotoolsID: 2
-    biotoolsCURIE: 2
-    version: 5
+    # SPARSE tier - Essential basic information (20 points total)
+    name: 5                # Required for all entries
+    description: 5         # Critical for tool understanding
+    homepage: 5            # Essential for tool access
+    biotoolsID: 5          # Unique ID requirement
     
-    # Detailed Description (15%)
-    function: 5
-    topic: 5
-    operation: 5
+    # BASIC DETAILS tier - Core metadata (30 points total)
+    toolType: 10           # Essential classification
+    topic: 10              # Scientific topic(s) 
+    publication: 10        # Publication(s) requirement
     
-    # Technical Details (25%)
-    toolType: 4
-    language: 3
-    operatingSystem: 3
-    license: 4
-    maturity: 3
-    cost: 3
-    accessibility: 5
+    # DETAILED tier - Technical information (25 points total)
+    function: 8            # Scientific operation(s)
+    operatingSystem: 4     # Platform compatibility
+    language: 4            # Programming language
+    license: 4             # License information
+    documentation: 5       # Documentation requirement
     
-    # Documentation (20%)
-    documentation: 6
-    publication: 8
-    publicationsPrimaryID: 6
+    # HIGHLY DETAILED tier - Rich metadata (15 points total) 
+    input_output: 5        # Type of input & output data
+    accessibility: 5       # Accessibility information
+    code_availability: 2.5 # Code availability
+    downloads: 2.5         # Downloads availability
     
-    # Accessibility (10%)
-    download: 5
-    link: 3
-    repository: 2
-    
-    # Community (10%)
-    credit: 4
-    contact: 6
+    # COMPREHENSIVE tier - Advanced features (10 points total)
+    supported_data_formats: 3    # Supported data formats
+    scientific_benchmark: 3      # Scientific benchmark
+    technical_monitoring: 4      # Technical monitoring
 
-  # Minimum required fields for each tier
+  # Field groups for "at least one" requirements (based on image)
+  field_groups:
+    # Documentation group - at least one type of documentation required
+    documentation_group:
+      weight: 5              # Documentation requirement for DETAILED tier
+      fields:
+        - documentation      # General documentation, manual, API docs, specifications
+      description: "At least one: General, Manual, API documentation, API specification"
+      types_required:        # Specific types within documentation array
+        - "General"          # documentation.type = "General"
+        - "User manual"      # documentation.type = "User manual"  
+        - "API documentation" # documentation.type = "API documentation"
+        - "API specification" # documentation.type = "API specification"
+      
+    # Support group - at least one support channel required  
+    support_group:
+      weight: 10             # Support requirement for BASIC DETAILS tier
+      fields:
+        - credit            # Contact person information
+        - link              # May contain support links
+      description: "At least one: Helpdesk, Issue tracker, Mailing list, Contact person"
+      types_required:        # Specific types within field arrays
+        - "Helpdesk"         # link.type = "Helpdesk"
+        - "Issue tracker"    # link.type = "Issue tracker"
+        - "Mailing list"     # link.type = "Mailing list"
+        - "Primary contact"  # credit.typeRole = "Primary contact"
+      
+    # Code availability group - at least one source access method
+    code_availability_group:
+      weight: 2.5            # Code availability for HIGHLY DETAILED tier
+      fields:
+        - link              # Repository links, source code access
+        - download          # Source code and package downloads
+      description: "At least one: Repository, Source code, Source package"
+      types_required:        # Specific types within field arrays
+        - "Repository"       # link.type = "Repository"
+        - "Source code"      # download.type = "Source code"  
+        - "Software package" # download.type = "Software package"
+      
+    # Downloads group - at least one download option
+    downloads_group:
+      weight: 2.5            # Downloads for HIGHLY DETAILED tier
+      fields:
+        - download          # Various download types
+        - link              # May contain download links
+      description: "At least one: Biological data, Binaries, Binary package, Container file, CWL file, Ontology, VM image, Tool wrappers"
+      types_required:        # Specific types within download array
+        - "Biological data"    # download.type = "Biological data"
+        - "Binaries"          # download.type = "Binaries"
+        - "Binary package"    # download.type = "Binary package"
+        - "Container file"    # download.type = "Container file"
+        - "CWL file"          # download.type = "CWL file"
+        - "Ontology"          # download.type = "Ontology"
+        - "VM image"          # download.type = "VM image"
+        - "Tool wrapper (Galaxy)"   # download.type = "Tool wrapper (galaxy)"
+        - "Tool wrapper (Taverna)"  # download.type = "Tool wrapper (taverna)"
+        - "Tool wrapper (Other)"    # download.type = "Tool wrapper (other)"
+      
+    # Accessibility group - at least one accessibility/cost indicator
+    accessibility_group:
+      weight: 5              # Accessibility for HIGHLY DETAILED tier
+      fields:
+        - accessibility     # Terms of use, accessibility status
+        - cost              # Economic model
+        - documentation     # Terms of use documentation
+      description: "At least one: Terms of use, Accessibility, Cost"
+      types_required:        # Specific types within field arrays
+        - "Terms of use"     # documentation.type = "Terms of use"
+
+  # Minimum required fields for each tier (based on image criteria)
   tier_requirements:
+    # SPARSE - Minimum viable tool entry (4 fields required)
     tier_1:
       - name
       - description
       - homepage
+      - biotoolsID                # Unique ID requirement
+      
+    # BASIC DETAILS - Essential scientific metadata (7 fields required)
     tier_2:
       - name
       - description
       - homepage
-      - function
-      - topic
+      - biotoolsID
+      - toolType                  # Tool type required
+      - topic                     # Scientific topic(s) required
+      - publication              # Publication(s) required
+      - support_group             # At least one support channel
+      
+    # DETAILED - Comprehensive core information (12 fields required)
     tier_3:
       - name
       - description
       - homepage
-      - function
-      - topic
-      - operation
+      - biotoolsID
       - toolType
+      - topic
+      - publication
+      - support_group
+      - function                 # Scientific operation(s) required
+      - documentation_group      # At least one: General, manual, API documentation, API specification
+      - operatingSystem         # Operating system required
+      - language                # Programming language required
+      - license                 # License required
+      
+    # HIGHLY DETAILED - Rich metadata for discoverability (16 fields required)
     tier_4:
       - name
       - description
       - homepage
-      - function
-      - topic
-      - operation
+      - biotoolsID
       - toolType
+      - topic
+      - publication
+      - support_group
+      - function
+      - documentation_group
+      - operatingSystem
       - language
       - license
-      - documentation
+      - input_output            # Type of input & output data required
+      - accessibility_group     # At least one: Terms of use, accessibility, cost
+      - code_availability_group # At least one: Repository, source code, source package
+      - downloads_group         # At least one download option
+      
+    # COMPREHENSIVE - Complete tool profile with advanced features (19 fields required)
     tier_5:
       - name
       - description
       - homepage
-      - function
-      - topic
-      - operation
+      - biotoolsID
       - toolType
+      - topic
+      - publication
+      - support_group
+      - function
+      - documentation_group
+      - operatingSystem
       - language
       - license
-      - documentation
-      - publication
-      - contact
-      - download
+      - input_output
+      - accessibility_group
+      - code_availability_group
+      - downloads_group
+      - supported_data_formats  # Supported data formats
+      - scientific_benchmark    # Scientific benchmark
+      - technical_monitoring    # Technical monitoring
+      
+  # Group-based evaluation rules
+  # Groups are evaluated as "at least one" - if any field in the group has content,
+  # the group requirement is satisfied and gets full weight points
+  evaluation_rules:
+    group_scoring: "at_least_one"  # Groups require at least one field to be present
+    individual_scoring: "required" # Individual fields must be present
+    empty_evaluation:              # How to handle empty values
+      - ""                        # Empty string
+      - []                        # Empty array
+      - null                      # Null value
+    
+  # Field mapping for bio.tools API compatibility (based on JSON structure)
+  # Maps abstract requirements to actual bio.tools fields from the JSON
+  field_mappings:
+    # Basic fields map directly to JSON properties
+    name: "name"
+    description: "description"
+    homepage: "homepage"
+    biotoolsID: "biotoolsID"
+    toolType: "toolType"
+    topic: "topic"
+    publication: "publication"
+    function: "function"
+    operatingSystem: "operatingSystem"
+    language: "language"
+    license: "license"
+    
+    # Input/output data mapping
+    input_output:
+      primary_fields: ["function"]  # function contains input/output arrays
+      description: "Type of input & output data from function.input and function.output"
+    
+    # Documentation types are all in documentation array
+    documentation_group:
+      primary_fields: ["documentation"]
+      filter_types: ["General", "User manual", "API documentation", "API specification"]
+      
+    # Support can come from credit array (typeRole field)
+    support_group:
+      primary_fields: ["credit"]   # Contact information in credit array
+      secondary_fields: ["link"]   # Support links in link array
+      filter_types: ["Helpdesk", "Issue tracker", "Mailing list", "Primary contact"]
+      
+    # Code availability through links and downloads
+    code_availability_group:
+      primary_fields: ["link", "download"]
+      filter_types: ["Repository", "Source code", "Software package"]
+      
+    # Downloads through download array
+    downloads_group:
+      primary_fields: ["download"]
+      secondary_fields: ["link"]
+      filter_types: ["Biological data", "Binaries", "Binary package", "Container file", "CWL file", "Ontology", "VM image", "Tool wrapper (galaxy)", "Tool wrapper (taverna)", "Tool wrapper (other)"]
+      
+    # Accessibility information
+    accessibility_group:
+      primary_fields: ["accessibility", "cost", "documentation"]
+      filter_types: ["Terms of use"]
+      
+    # Advanced fields for COMPREHENSIVE tier
+    supported_data_formats:
+      primary_fields: ["function"]
+      description: "Data formats from function.input.format and function.output.format"
+      
+    scientific_benchmark:
+      primary_fields: ["publication"]
+      description: "Scientific benchmarks referenced in publications"
+      
+    technical_monitoring:
+      primary_fields: ["maturity", "cost", "accessibility"]
+      description: "Technical monitoring indicated by maturity, cost, and accessibility status"
+      
+  # Tier descriptions based on image criteria
+  tier_descriptions:
+    tier_1: "SPARSE - Minimum viable tool entry (Name, Description, Homepage, Unique ID)"
+    tier_2: "BASIC DETAILS - Essential scientific metadata (+ Tool type, Scientific topics, Publication, Support)"
+    tier_3: "DETAILED - Comprehensive core information (+ Scientific operations, Documentation, Operating system, Language, License)"
+    tier_4: "HIGHLY DETAILED - Rich metadata for discoverability (+ Type of input & output data, Accessibility, Code availability, Downloads)"
+    tier_5: "COMPREHENSIVE - Complete tool profile (+ Supported data formats, Scientific benchmark, Technical monitoring)"
 
 api:
   base_url: "https://bio.tools/api/tool/?format=json"

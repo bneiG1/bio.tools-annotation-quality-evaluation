@@ -58,5 +58,8 @@ applyTo: '**'
 - Prefer batch operations for large-scale analysis.
 - Document new analysis or scoring logic in notebooks and scripts.
 
+### Files to Ignore
+- **Exclude from analysis:** Ignore all files in the `data\biotools` directory as these are raw data files from the bio.tools API and should not be modified or analyzed directly by Copilot.
+
 ---
 For unclear or missing conventions, consult `README.md`, `notebooks/bio_tools_quality_evaluation.ipynb`, and config files. Ask for feedback if any section is incomplete or ambiguous.

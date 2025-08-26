@@ -8,13 +8,19 @@ import logging
 from typing import Dict, List, Optional, Union
 from urllib.parse import urljoin, urlencode
 import json
+from .local_data_manager import LocalDataManager
+
+# TODO: 
+# scoate elementele null si  empty (asa https://github.com/bio-tools/biotoolsRegistry/blob/e442768520e674a019e702ef489a14bf32232e8a/backend/elixir/renderers.py#L102)
 
 class BioToolsAPIClient:
     """Client for interacting with the bio.tools API."""
     
     def __init__(self, base_url: str = "https://bio.tools/api/tool/?format=json",
                  timeout: int = 30, retry_attempts: int = 3,
-                 delay_between_requests: float = 1.0):
+                 delay_between_requests: float = 1.0,
+                 local_data_dir: str = "data/biotools",
+                 enable_local_storage: bool = True):
         """
         Initialize the API client.
         
@@ -23,12 +29,21 @@ class BioToolsAPIClient:
             timeout: Request timeout in seconds
             retry_attempts: Number of retry attempts for failed requests
             delay_between_requests: Delay between requests in seconds
+            local_data_dir: Directory for local data storage
+            enable_local_storage: Whether to enable local data storage
         """
         self.base_url = base_url
         self.timeout = timeout
         self.retry_attempts = retry_attempts
         self.delay = delay_between_requests
         self.session = requests.Session()
+        
+        # Initialize local data manager
+        self.enable_local_storage = enable_local_storage
+        if enable_local_storage:
+            self.local_manager = LocalDataManager(local_data_dir)
+        else:
+            self.local_manager = None
         
         # Set up logging
         logging.basicConfig(level=logging.INFO)
@@ -99,7 +114,8 @@ class BioToolsAPIClient:
             return None
     
     def get_tools_by_collection(self, collection: str, limit: int = 100,
-                               page: int = 1) -> List[Dict]:
+                               page: int = 1, use_local: bool = False,
+                               save_locally: bool = True) -> List[Dict]:
         """
         Retrieve tools from a specific collection.
         
@@ -107,10 +123,21 @@ class BioToolsAPIClient:
             collection: Collection name (e.g., 'proteomics')
             limit: Maximum number of tools to retrieve
             page: Page number for pagination
+            use_local: Whether to use locally stored data instead of API
+            save_locally: Whether to save API results locally
             
         Returns:
             List of tool dictionaries
         """
+        # If using local data and local manager is available
+        if use_local and self.local_manager:
+            self.logger.info(f"Loading collection '{collection}' from local storage")
+            tools = self.local_manager.load_all_tools(subdirectory="collections", limit=limit)
+            if tools:
+                return tools
+            else:
+                self.logger.warning(f"No local data found for collection '{collection}', falling back to API")
+        
         # Use bio.tools API page size (50 per page)
         page_size = 50
         params = {
@@ -138,6 +165,11 @@ class BioToolsAPIClient:
                 tools.extend(page_tools)
                 self.logger.info(f"Retrieved {len(tools)} tools so far for collection '{collection}'... (page {current_page}, got {len(page_tools)} tools this page)")
                 
+                # Save tools locally if enabled
+                if save_locally and self.local_manager:
+                    save_result = self.local_manager.save_tools(page_tools, subdirectory="collections")
+                    self.logger.debug(f"Saved {save_result['saved']} tools locally")
+                
                 # Check if we have more pages available
                 total_count = response.get('count', 0)
                 if total_count > 0:
@@ -158,17 +190,29 @@ class BioToolsAPIClient:
         self.logger.info(f"Returning {len(final_tools)} tools for collection '{collection}' (requested limit: {limit})")
         return final_tools
     
-    def get_tools_by_topic(self, topic: str, limit: int = 100) -> List[Dict]:
+    def get_tools_by_topic(self, topic: str, limit: int = 100, use_local: bool = False,
+                          save_locally: bool = True) -> List[Dict]:
         """
         Retrieve tools by topic.
         
         Args:
             topic: Topic name (e.g., 'Proteomics')
             limit: Maximum number of tools to retrieve
+            use_local: Whether to use locally stored data instead of API
+            save_locally: Whether to save API results locally
             
         Returns:
             List of tool dictionaries
         """
+        # If using local data and local manager is available
+        if use_local and self.local_manager:
+            self.logger.info(f"Loading topic '{topic}' from local storage")
+            tools = self.local_manager.load_all_tools(subdirectory="topics", limit=limit)
+            if tools:
+                return tools
+            else:
+                self.logger.warning(f"No local data found for topic '{topic}', falling back to API")
+        
         # Use bio.tools API page size (50 per page)
         page_size = 50
         params = {
@@ -196,6 +240,11 @@ class BioToolsAPIClient:
                 tools.extend(page_tools)
                 self.logger.info(f"Retrieved {len(tools)} tools so far for topic '{topic}'... (page {page}, got {len(page_tools)} tools this page)")
                 
+                # Save tools locally if enabled
+                if save_locally and self.local_manager:
+                    save_result = self.local_manager.save_tools(page_tools, subdirectory="topics")
+                    self.logger.debug(f"Saved {save_result['saved']} tools locally")
+                
                 # Check if we have more pages available
                 total_count = response.get('count', 0)
                 if total_count > 0:
@@ -216,17 +265,29 @@ class BioToolsAPIClient:
         self.logger.info(f"Returning {len(final_tools)} tools for topic '{topic}' (requested limit: {limit})")
         return final_tools
     
-    def search_tools(self, query: str, limit: int = 100) -> List[Dict]:
+    def search_tools(self, query: str, limit: int = 100, use_local: bool = False,
+                    save_locally: bool = True) -> List[Dict]:
         """
         Search for tools using a query string.
         
         Args:
             query: Search query
             limit: Maximum number of tools to retrieve
+            use_local: Whether to use locally stored data instead of API
+            save_locally: Whether to save API results locally
             
         Returns:
             List of tool dictionaries
         """
+        # If using local data and local manager is available
+        if use_local and self.local_manager:
+            self.logger.info(f"Loading query '{query}' from local storage")
+            tools = self.local_manager.load_all_tools(subdirectory="queries", limit=limit)
+            if tools:
+                return tools
+            else:
+                self.logger.warning(f"No local data found for query '{query}', falling back to API")
+        
         # Use bio.tools API page size (50 per page)
         page_size = 50
         params = {
@@ -254,6 +315,11 @@ class BioToolsAPIClient:
                 tools.extend(page_tools)
                 self.logger.info(f"Retrieved {len(tools)} tools so far for query '{query}'... (page {page}, got {len(page_tools)} tools this page)")
                 
+                # Save tools locally if enabled
+                if save_locally and self.local_manager:
+                    save_result = self.local_manager.save_tools(page_tools, subdirectory="queries")
+                    self.logger.debug(f"Saved {save_result['saved']} tools locally")
+                
                 # Check if we have more pages available
                 total_count = response.get('count', 0)
                 if total_count > 0:
@@ -274,16 +340,28 @@ class BioToolsAPIClient:
         self.logger.info(f"Returning {len(final_tools)} tools for query '{query}' (requested limit: {limit})")
         return final_tools
     
-    def get_all_tools(self, limit: int = 1000) -> List[Dict]:
+    def get_all_tools(self, limit: int = 1000, use_local: bool = False,
+                     save_locally: bool = True) -> List[Dict]:
         """
         Retrieve all tools from the registry.
         
         Args:
             limit: Maximum number of tools to retrieve
+            use_local: Whether to use locally stored data instead of API
+            save_locally: Whether to save API results locally
             
         Returns:
             List of tool dictionaries
         """
+        # If using local data and local manager is available
+        if use_local and self.local_manager:
+            self.logger.info("Loading all tools from local storage")
+            tools = self.local_manager.load_all_tools(subdirectory="all", limit=limit)
+            if tools:
+                return tools
+            else:
+                self.logger.warning("No local data found, falling back to API")
+        
         # Start with API's maximum page size - bio.tools API returns 50 per page
         page_size = 50
         params = {'page_size': page_size}
@@ -307,6 +385,11 @@ class BioToolsAPIClient:
                 
                 tools.extend(page_tools)
                 self.logger.info(f"Retrieved {len(tools)} tools so far... (page {page}, got {len(page_tools)} tools this page)")
+                
+                # Save tools locally if enabled
+                if save_locally and self.local_manager:
+                    save_result = self.local_manager.save_tools(page_tools, subdirectory="all")
+                    self.logger.debug(f"Saved {save_result['saved']} tools locally")
                 
                 # Check if we have more pages available
                 total_count = response.get('count', 0)
@@ -374,4 +457,47 @@ class BioToolsAPIClient:
             return tools
         except Exception as e:
             self.logger.error(f"Failed to load tools from file: {e}")
+            return []
+
+    def get_local_storage_info(self) -> Dict:
+        """
+        Get information about local storage.
+        
+        Returns:
+            Dictionary with storage information
+        """
+        if self.local_manager:
+            return self.local_manager.get_storage_info()
+        else:
+            return {"error": "Local storage not enabled"}
+    
+    def clear_local_data(self, subdirectory: str = "all") -> int:
+        """
+        Clear local data from a subdirectory.
+        
+        Args:
+            subdirectory: Subdirectory to clear ('all', 'collections', 'topics', 'queries')
+            
+        Returns:
+            Number of files deleted
+        """
+        if self.local_manager:
+            return self.local_manager.clear_tools(subdirectory)
+        else:
+            self.logger.warning("Local storage not enabled")
+            return 0
+    
+    def list_local_tools(self, subdirectory: str = "all") -> List[str]:
+        """
+        List locally available tools.
+        
+        Args:
+            subdirectory: Subdirectory to check
+            
+        Returns:
+            List of tool IDs
+        """
+        if self.local_manager:
+            return self.local_manager.list_available_tools(subdirectory)
+        else:
             return []
