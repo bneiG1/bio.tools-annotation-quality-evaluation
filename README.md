@@ -1,253 +1,103 @@
-# bio.tools Annotation Quality Evaluation
+# bio.tools Annotation Quality — Evaluation & Enhancement
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+A semi-automated pipeline to assess and improve the metadata quality of tools registered in the ELIXIR bio.tools registry.
 
 ## Overview
 
-The **bio.tools Annotation Quality Evaluation** system provides a comprehensive framework for assessing and improving metadata quality in the [ELIXIR bio.tools](https://bio.tools) registry. This tool addresses the critical need for standardized evaluation of scientific tool annotations, enabling researchers and maintainers to identify quality gaps and enhance discoverability.
+Metadata quality in the bio.tools registry directly affects discoverability and reuse. This project builds a repeatable workflow that:
 
-### Key Features
+- scores tool metadata completeness against the Tool Information Standards and the biotoolsSchema
+- integrates linter diagnostics to detect structural and syntactic issues
+- summarizes missing or malformed attributes across collections/domains
+- produces visual reports (radar charts, heatmaps) and recommendations for standard improvements
 
-- 🎯 **Tier-based scoring system** (1-5 tiers) aligned with [Tool Information Standards](https://bio-tools.github.io/Tool-Information-Standards/use_cases.html)
-- 📊 **Comprehensive quality metrics** and statistical analysis
-- 🔍 **Integration with bio.tools linter** for automated diagnostics  
-- 📈 **Rich visualizations** including charts, heatmaps, and interactive dashboards
-- 🛠️ **Flexible configuration** for custom scoring criteria
-- 🔄 **Batch processing** capabilities for large-scale analysis
-- 📋 **Detailed reporting** with actionable insights
-- 💾 **Local data storage** - save each biotool as individual JSON files
-- 🏠 **Offline evaluation** - run evaluations on locally stored data
-- 📂 **Data organization** - tools organized by collection, topic, and query
+The pipeline is designed to be modular so it can be split into two sub-projects: (1) completeness scoring and (2) linter analysis.
 
-## Quick Start
+## Key objectives
 
-### Installation
+1. Implement a tier-based scoring pipeline that assigns each tool a completeness score and a tier (1–5).
+2. Analyze completeness patterns across domains/collections and identify commonly missing attributes.
+3. Integrate bio.tools linter output to enrich diagnostics.
+4. Produce visual and tabular reports and draft proposed revisions to the Tool Information Standards.
 
-```bash
-# Clone the repository
-git clone https://github.com/bneiG1/bio.tools-annotation-quality-evaluation.git
-cd bio.tools-annotation-quality-evaluation
+## Methodology
 
-# Create virtual environment
+1. Data collection
+	- Retrieve tool entries using the bio.tools API or curated subsets (for example: proteomics).
+	- Store raw JSON records for reproducibility.
+
+2. JSON schema validation
+	- Validate metadata against the biotoolsSchema to detect structural issues.
+
+3. Tier-based scoring
+	- Map the Tool Information Standards to a set of scored attributes.
+	- Compute an overall completeness score and assign a tier (1–5).
+
+4. Linter integration
+	- Run the bio.tools linter on selected entries.
+	- Parse errors/warnings and merge diagnostics with completeness scores.
+
+5. Reporting
+	- Aggregate statistics on missing or malformed fields by tier and domain.
+	- Generate visual summaries (radar charts, heatmaps) and CSV/JSON summary tables.
+
+## Expected outcomes
+
+- A reusable scoring and analysis pipeline for bio.tools metadata.
+- An integrated dataset combining raw metadata, schema validation results, linter diagnostics, and completeness scores.
+- Visual and tabular reports of metadata quality per tier and domain.
+- A short proposal for revisions to the Tool Information Standards based on empirical findings.
+
+## Prerequisites
+
+- Python 3.8+ and basic familiarity with virtual environments
+- Experience with JSON handling and data visualization (matplotlib, seaborn, plotly, etc.)
+
+## Getting started (suggested)
+
+1. Create a virtual environment and activate it:
+
+```powershell
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
+```
 
-# Install dependencies
+2. Install dependencies (if a requirements file is added):
+
+```powershell
 pip install -r requirements.txt
 ```
 
-### Basic Usage
+3. Run the main pipeline (TBD — implement script entrypoints):
 
-```bash
-# Run evaluation on proteomics tools (saves tools locally by default)
-python scripts/run_evaluation.py --topic Proteomics --limit 100 --visualize
-
-# Use locally stored data instead of API
-python scripts/run_evaluation.py --topic Proteomics --use-local --visualize
-
-# Run evaluation on specific collection
-python scripts/run_evaluation.py --collection Galaxy --limit 50 --log-level DEBUG
-
-# Local storage management commands
-python scripts/run_evaluation.py --storage-info
-python scripts/run_evaluation.py --list-local-tools
-python scripts/run_evaluation.py --clear-local-data all
-
-# Manage local data with dedicated tool
-python scripts/manage_local_data.py info
-python scripts/manage_local_data.py download --collection proteomics --limit 100
-
-# Generate dashboard
-python scripts/generate_dashboard.py
+```powershell
+python -m src.main --help
 ```
 
-### Local Data Storage
+Note: This repository currently contains planning and scope material. Implementation files (scripts, modules, requirements) should be added to follow the project structure.
 
-The system now supports local storage of individual biotools:
+## Contribution & project structure
 
-- **Individual JSON files** for each tool (better for version control)
-- **Organized storage** by collection, topic, and query
-- **Offline evaluation** capabilities
-- **Faster repeated evaluations**
+Recommended structure when implementing:
 
-See [Local Storage Documentation](docs/local-storage.md) for detailed information.
+- src/ — Python package for pipeline code
+- data/ — raw and processed JSON/CSV outputs
+- notebooks/ — exploratory analysis and figures
+- tests/ — unit and integration tests
+- docs/ — additional documentation and the proposed revision drafts
 
-## Architecture
+If you'd like help scaffolding the codebase (project layout, starter scripts, tests, and a minimal working pipeline), open an issue or request a scaffold in this repository and I'll create it.
 
-The application follows a modular architecture with clear separation of concerns:
+## Resources
 
-```
-src/
-├── data_collection/     # API clients and data parsing
-├── scoring/            # Completeness scoring and tier classification  
-├── linter/             # Integration with bio.tools linter
-├── analysis/           # Statistical analysis and metrics
-└── visualization/      # Charts, plots, and dashboards
-```
-
-## Documentation
-
-Comprehensive documentation is available in the `docs/` folder:
-
-### Getting Started
-- 📖 **[User Guide](docs/user-guide.md)** - Installation, basic usage, and common workflows
-- 🚀 **[Examples](docs/examples.md)** - Practical examples and use cases for different scenarios
-- ❓ **[FAQ](docs/faq.md)** - Frequently asked questions and quick answers
-
-### System Understanding  
-- 🏗️ **[Architecture Guide](docs/architecture.md)** - System design, components, and data flow
-- ⚙️ **[Configuration Guide](docs/configuration.md)** - Customizing scoring, thresholds, and behavior
-- 📊 **[Scoring Methodology](docs/scoring-methodology.md)** - Detailed explanation of the tier-based scoring system
-
-### Advanced Usage
-- 🔌 **[API Reference](docs/api-reference.md)** - Complete API documentation for programmatic usage
-- � **[Standards Mapping](docs/standards-mapping.md)** - How the system aligns with ELIXIR and community standards
-- � **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
-
-### Development & Contributing
-- 👨‍💻 **[Development Guide](docs/development.md)** - Setting up development environment and contributing
-- 📝 **[Changelog](CHANGELOG.md)** - Version history and release notes
-
-## Key Concepts
-
-### Tier Classification System
-
-Tools are classified into 5 tiers based on metadata completeness:
-
-- **Tier 1 (SPARSE)**: Basic information only (0-15 points)
-- **Tier 2 (BASIC DETAILS)**: Essential metadata (16-40 points)  
-- **Tier 3 (DETAILED)**: Comprehensive core information (41-65 points)
-- **Tier 4 (HIGHLY DETAILED)**: Rich metadata (66-85 points)
-- **Tier 5 (COMPREHENSIVE)**: Complete tool profile (86-100 points)
-
-### Scoring Categories
-
-- **Basic Information** (15%): Name, description, homepage, IDs
-- **Core Metadata** (25%): Tool type, topics, publications  
-- **Technical Information** (20%): Operations, documentation, platform info
-- **Accessibility** (20%): I/O formats, downloads, code availability
-- **Advanced Features** (15%): Benchmarks, monitoring, community features
-- **Community** (5%): Credits, contact information
-
-## Usage Examples
-
-### Command Line Interface
-
-```bash
-# Evaluate tools by topic with visualization
-python scripts/run_evaluation.py --topic "Sequence analysis" --limit 200 --visualize
-
-# Evaluate specific collection with custom output
-python scripts/run_evaluation.py --collection Galaxy --output-dir results/galaxy --log-level INFO
-
-# Query-based evaluation with URL accessibility checking
-python scripts/run_evaluation.py --query "protein folding" --limit 50 --check-urls
-
-# Comprehensive evaluation with URL checking and visualization
-python scripts/run_evaluation.py --topic "Proteomics" --limit 100 --check-urls --visualize
-```
-
-### Programmatic Usage
-
-```python
-from src.data_collection.api_client import BioToolsAPIClient
-from src.scoring.completeness_scorer import CompletenessScorer
-from src.scoring.tier_classifier import TierClassifier
-
-# Initialize components with URL checking enabled
-api_client = BioToolsAPIClient()
-scorer = CompletenessScorer('config/scoring_config.yaml', enable_url_checking=True)
-classifier = TierClassifier('config/scoring_config.yaml')
-
-# Fetch and score tools
-tools = api_client.get_tools_by_topic("Proteomics", limit=100)
-for tool in tools:
-    score = scorer.score_tool(tool)
-    tier = classifier.classify_tool(score)
-    
-    # Check URL accessibility results
-    url_info = score['details']['accessibility'].get('url_accessibility')
-    homepage_ok = url_info['summary']['homepage_accessible'] if url_info else 'N/A'
-    
-    print(f"{tool['name']}: Score {score['total_score']:.1f}, Tier {tier}, Homepage: {homepage_ok}")
-```
-
-## Configuration
-
-The system is highly configurable via `config/scoring_config.yaml`. You can customize:
-
-- Scoring weights for different metadata categories
-- Tier thresholds and classification rules  
-- Required fields and validation criteria
-- Output formats and visualization settings
-
-See the [Configuration Guide](docs/configuration.md) for detailed information.
-
-## URL Accessibility Checking
-
-The system includes optional URL accessibility checking to validate that homepage URLs and other links are still functional:
-
-- **Homepage Validation**: Checks if the primary homepage URL is accessible
-- **Link Validation**: Validates all URLs found in tool metadata  
-- **Smart Scoring**: Adjusts accessibility scores based on URL health
-- **Performance Optimized**: Uses concurrent checking with caching and rate limiting
-
-Enable URL checking with the `--check-urls` flag:
-
-```bash
-python scripts/run_evaluation.py --topic "Proteomics" --limit 50 --check-urls
-```
-
-See the [URL Checking Guide](docs/url-checking.md) for detailed information.
-
-## Output and Reports
-
-The evaluation generates comprehensive outputs:
-
-- **Scoring Results**: JSON files with detailed scores and classifications
-- **Statistical Reports**: Summary statistics and quality metrics
-- **Visualizations**: Charts, heatmaps, and distribution plots
-- **Interactive Dashboard**: Web-based interface for exploring results
-- **CSV Exports**: Tabular data for further analysis
-
-## Contributing
-
-We welcome contributions! Please see our [Development Guide](docs/development.md) for information on:
-
-- Setting up the development environment
-- Code style and standards
-- Testing procedures
-- Submitting pull requests
-
-## Research and Citations
-
-This tool supports research into metadata quality in scientific registries. If you use this system in your research, please cite:
-
-```bibtex
-@software{biotools_quality_eval,
-  title = {bio.tools Annotation Quality Evaluation},
-  author = {Your Name},
-  year = {2025},
-  url = {https://github.com/bneiG1/bio.tools-annotation-quality-evaluation}
-}
-```
+- Tool Information Standards: https://bio-tools.github.io/Tool-Information-Standards/use_cases.html
+- biotoolsSchema: https://github.com/bio-tools/biotoolsschema
+- bio.tools linter: https://github.com/3top1a/biotools-linter/tree/main
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- [ELIXIR bio.tools](https://bio.tools) for providing the registry and API
-- [Tool Information Standards](https://bio-tools.github.io/Tool-Information-Standards/) community
-- [bio.tools linter](https://github.com/3top1a/biotools-linter) project
-- ELIXIR community for metadata standardization efforts
-
-## Support
-
-- 📖 Check the [documentation](docs/)
-- 🐛 [Report issues](https://github.com/bneiG1/bio.tools-annotation-quality-evaluation/issues)
-- 💬 [Start a discussion](https://github.com/bneiG1/bio.tools-annotation-quality-evaluation/discussions)
+See the `LICENSE` file for licensing details.
 
 ---
+
+Maintainers: bneiG1
