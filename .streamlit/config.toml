@@ -35,6 +35,11 @@ address = "0.0.0.0"
 # The port where the server will listen for browser connections.
 port = 8501
 
+# Alternative ports to try if main port is busy
+# Note: This is handled by our deployment script
+# port = 8502
+# port = 8503
+
 # The base path for the URL where Streamlit should be reachable from.
 baseUrlPath = ""
 
@@ -67,6 +72,13 @@ serverPort = 8501
 [deprecation]
 
 # Note: showfileUploaderEncoding and showPyplotGlobalUse have been removed in newer versions
+
+[global]
+
+# Deployment-specific settings
+# Disable file watcher in production to improve performance
+# This helps prevent issues with containerized deployments
+watchdog_enabled = false
 
 [theme]
 
