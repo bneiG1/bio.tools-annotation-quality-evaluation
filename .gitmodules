@@ -1,0 +1,3 @@
+[submodule "biotools-linter"]
+	path = biotools-linter
+	url = https://github.com/3top1a/biotools-linter.git
