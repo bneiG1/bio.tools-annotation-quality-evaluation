@@ -12,6 +12,9 @@
 # Configure the ability to share apps publicly via Streamlit Community Cloud
 # Note: showErrorDetails has been removed in newer versions
 
+# Deployment-specific settings
+# File watcher settings are now handled automatically by Streamlit
+
 [server]
 
 # List of folders that should not be watched for changes. This impacts both "Run on Save" and @st.cache.
@@ -72,13 +75,6 @@ serverPort = 8501
 [deprecation]
 
 # Note: showfileUploaderEncoding and showPyplotGlobalUse have been removed in newer versions
-
-[global]
-
-# Deployment-specific settings
-# Disable file watcher in production to improve performance
-# This helps prevent issues with containerized deployments
-watchdog_enabled = false
 
 [theme]
 
