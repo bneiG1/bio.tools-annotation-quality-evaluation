@@ -223,3 +223,76 @@ class BioToolsAPIClient:
         
         return self._make_request(self.TOOLS_ENDPOINT, params)
 
+    def search_by_collection(
+        self,
+        collection_id: str,
+        page: int = 1,
+        format: str = "json",
+        sort: str = "lastUpdate",
+        order: str = "desc",
+        size: Optional[int] = None,
+        **filters
+    ) -> Dict:
+        """
+        Search tools by collection ID.
+        
+        Args:
+            collection_id: The collection ID to search for
+            page: Page number for pagination
+            format: Response format
+            sort: Sort field (lastUpdate, additionDate, name, affiliation, score)
+            order: Sort order (desc, asc)
+            size: Maximum number of tools to return (will fetch multiple pages if needed)
+            **filters: Additional filter parameters
+            
+        Returns:
+            Paginated list of tools in the collection
+        """
+        params = {
+            "page": page,
+            "format": format,
+            "sort": sort,
+            "ord": order,
+            "collectionID": collection_id
+        }
+        
+        # Add additional filter parameters
+        params.update(filters)
+        
+        # If size is specified and > 25 (default page size), fetch multiple pages
+        if size and size > 25:
+            all_tools = []
+            current_page = page
+            tools_collected = 0
+            last_response = None
+            
+            while tools_collected < size:
+                params["page"] = current_page
+                last_response = self._make_request(self.TOOLS_ENDPOINT, params)
+                
+                tools = last_response.get('list', [])
+                if not tools:
+                    break
+                
+                # Add tools up to the size limit
+                remaining_needed = size - tools_collected
+                tools_to_add = tools[:remaining_needed]
+                all_tools.extend(tools_to_add)
+                tools_collected += len(tools_to_add)
+                
+                # If we got fewer tools than page size, we've reached the end
+                if len(tools) < 25:
+                    break
+                    
+                current_page += 1
+            
+            # Return response with combined tools
+            return {
+                'count': last_response.get('count', len(all_tools)) if last_response else len(all_tools),
+                'list': all_tools,
+                'next': last_response.get('next') if last_response and tools_collected < last_response.get('count', 0) else None,
+                'previous': last_response.get('previous') if last_response and page > 1 else None
+            }
+        else:
+            return self._make_request(self.TOOLS_ENDPOINT, params)
+

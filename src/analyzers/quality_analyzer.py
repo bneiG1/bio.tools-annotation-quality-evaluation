@@ -162,6 +162,10 @@ class QualityAnalyzer:
         else:
             self.data_cleaner = None
     
+    def get_linter_warning(self) -> Optional[str]:
+        """Get the linter warning message if linter is not available."""
+        return self.linter.get_warning_message()
+    
     def analyze_tool(self, tool_data: Dict) -> QualityReport:
         """
         Perform comprehensive quality analysis on a tool.

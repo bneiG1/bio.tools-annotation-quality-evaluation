@@ -13,6 +13,7 @@ import json
 import sys
 import logging
 import time
+import uuid
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime
@@ -67,19 +68,18 @@ st.markdown("""
         padding: 0.5rem 1rem;
         border-radius: 20px;
         font-weight: bold;
-        color: white;
         margin: 0.2rem;
     }
-    .grade-A { background-color: #28a745; }
-    .grade-B { background-color: #6f42c1; }
+    .grade-A { background-color: #28a745; color: white; }
+    .grade-B { background-color: #6f42c1; color: white; }
     .grade-C { background-color: #ffc107; color: black; }
-    .grade-D { background-color: #fd7e14; }
-    .grade-F { background-color: #dc3545; }
-    .tier-1 { background-color: #ff4d4d; }
-    .tier-2 { background-color: #ff9933; }
+    .grade-D { background-color: #fd7e14; color: white; }
+    .grade-F { background-color: #dc3545; color: white; }
+    .tier-1 { background-color: #ff4d4d; color: white; }
+    .tier-2 { background-color: #ff9933; color: white; }
     .tier-3 { background-color: #ffcc00; color: black; }
-    .tier-4 { background-color: #66cc00; }
-    .tier-5 { background-color: #00cc66; }
+    .tier-4 { background-color: #66cc00; color: white; }
+    .tier-5 { background-color: #00cc66; color: white; }
     .stProgress .stProgress-bar {
         background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
     }
@@ -110,6 +110,37 @@ class LiveBioToolsAnalyzer:
             <p style="color: #f0f0f0; margin: 0.5rem 0 0 0;">Real-time tool quality analysis with biotools API</p>
         </div>
         """, unsafe_allow_html=True)
+    
+    def render_system_warnings(self):
+        """Render system warnings and status messages."""
+        try:
+            # Check if quality analyzer is available and get any warnings
+            if MODULES_AVAILABLE and QualityAnalyzerType:
+                analyzer = self.get_quality_analyzer()
+                linter_warning = analyzer.get_linter_warning()
+                
+                if linter_warning:
+                    st.warning(f"⚠️ **Linter Warning**: {linter_warning}")
+                    with st.expander("ℹ️ What does this mean?"):
+                        st.markdown("""
+                        The bio.tools linter is an external tool that provides additional quality checks for tool metadata.
+                        Without it, the analysis will still work but will have fewer quality insights.
+                        
+                        **To enable the linter:**
+                        1. Clone the biotools-linter repository to your project root:
+                           ```
+                           git clone https://github.com/3top1a/biotools-linter.git
+                           ```
+                        2. Restart the application
+                        
+                        **What you're missing:**
+                        - EDAM ontology validation
+                        - URL accessibility checks
+                        - Advanced metadata validation rules
+                        """)
+        except Exception as e:
+            # Don't show errors for warning checks
+            pass
     
     def render_search_interface(self):
         """Render the search and analysis interface."""
@@ -208,13 +239,23 @@ class LiveBioToolsAnalyzer:
         st.sidebar.subheader("Collection Analysis")
         
         collection_id = st.sidebar.text_input(
-            "Collection ID",
-            placeholder="e.g., COVID-19",
-            help="Enter a bio.tools collection ID"
+            "Custom Collection ID",
+            placeholder="e.g., COVID-19, Galaxy, Bioconductor",
+            help="Enter a bio.tools collection ID. Check bio.tools for available collections."
         )
         
-        if st.sidebar.button("📚 Analyze Collection", disabled=not collection_id):
-            return self.analyze_collection(collection_id)
+        # Analysis options
+        max_tools = st.sidebar.slider(
+            "Maximum Tools to Analyze",
+            min_value=5,
+            max_value=100,
+            value=20,
+            step=5,
+            help="Limit the number of tools to analyze for performance"
+        )
+        
+        if st.sidebar.button("🔍 Analyze Collection", disabled=not collection_id):
+            return self.analyze_collection(collection_id, max_tools)
         
         return None
     
@@ -290,15 +331,21 @@ class LiveBioToolsAnalyzer:
             # Create a quality report
             report = analyzer.analyze_tool(tool_data)
             
-            return {
-                'tool_id': tool_data.get('biotoolsID', 'unknown'),
-                'tool_name': tool_data.get('name', 'Unknown Tool'),
-                'report': report,
-                'raw_data': tool_data
-            }
+            if report and hasattr(report, 'metrics'):
+                return {
+                    'tool_id': tool_data.get('biotoolsID', 'unknown'),
+                    'tool_name': tool_data.get('name', 'Unknown Tool'),
+                    'report': report,
+                    'raw_data': tool_data
+                }
+            else:
+                st.warning(f"No valid report generated for tool: {tool_data.get('name', 'Unknown')}")
+                return None
             
         except Exception as e:
-            st.error(f"Error analyzing tool quality: {str(e)}")
+            st.error(f"Error analyzing tool {tool_data.get('name', 'Unknown')}: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
             return None
     
     def analyze_single_tool(self, tool_id: str):
@@ -316,7 +363,7 @@ class LiveBioToolsAnalyzer:
                 if analysis:
                     st.session_state.current_analysis = analysis
                     st.session_state.analysis_history.append(analysis)
-                    self.display_single_tool_results(analysis)
+                    # Don't display here - let the main run() method handle display
                 
                 return analysis
     
@@ -353,7 +400,7 @@ class LiveBioToolsAnalyzer:
             
             if analyses:
                 st.session_state.analysis_results = analyses
-                self.display_bulk_analysis_results(analyses)
+                st.session_state.current_analysis = None  # Clear single analysis to show bulk results
             
             return analyses
     
@@ -367,12 +414,140 @@ class LiveBioToolsAnalyzer:
                 st.warning("Could not fetch random tools.")
                 return None
             
-            return self.search_and_analyze_tools("", num_tools, "lastUpdate", "desc")
+            st.success(f"Found {len(tools)} random tools. Starting analysis...")
+            
+            # Create progress bar
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            analyses = []
+            for i, tool_data in enumerate(tools):
+                tool_id = tool_data.get('biotoolsID', f'tool_{i}')
+                status_text.text(f"Analyzing {tool_id} ({i+1}/{len(tools)})")
+                
+                analysis = self.analyze_tool_quality(tool_data)
+                if analysis:
+                    analyses.append(analysis)
+                
+                progress_bar.progress((i + 1) / len(tools))
+                time.sleep(0.1)  # Small delay to show progress
+            
+            status_text.text("Analysis complete!")
+            progress_bar.empty()
+            status_text.empty()
+            
+            if analyses:
+                st.session_state.analysis_results = analyses
+                st.session_state.current_analysis = None  # Clear single analysis to show bulk results
+            
+            return analyses
     
-    def analyze_collection(self, collection_id: str):
+    def analyze_collection(self, collection_id: str, max_tools: int = 50):
         """Analyze tools in a collection."""
-        st.info("Collection analysis feature coming soon!")
-        return None
+        if not collection_id:
+            st.error("Please enter a collection ID")
+            return
+        
+        # Clear previous session state to avoid conflicts
+        st.session_state.analysis_results = []
+        st.session_state.current_analysis = None
+        
+        st.title(f"📚 Collection Analysis: {collection_id}")
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        try:
+            # Fetch tools from collection
+            status_text.text(f"🔍 Searching for tools in '{collection_id}' collection...")
+            progress_bar.progress(10)
+            
+            api_client = self.get_api_client()
+            response = api_client.search_by_collection(
+                collection_id=collection_id,
+                size=max_tools
+            )
+            
+            # Extract tools from API response
+            tools = response.get('list', []) if response else []
+            total_count = response.get('count', 0) if response else 0
+            
+            if not tools:
+                st.warning(f"No tools found in collection '{collection_id}'. Please check the collection ID.")
+                return
+            
+            # Limit the number of tools to analyze
+            tools = tools[:max_tools]
+            
+            progress_bar.progress(30)
+            status_text.text(f"📊 Found {total_count} tools in collection, analyzing {len(tools)}...")
+            
+            # Analyze each tool
+            results = []
+            for i, tool in enumerate(tools):
+                try:
+                    # Update progress
+                    progress = 30 + int((i / len(tools)) * 60)
+                    progress_bar.progress(progress)
+                    status_text.text(f"🔍 Analyzing tool {i+1}/{len(tools)}: {tool.get('name', 'Unknown')}")
+                    
+                    # Get full tool data
+                    full_tool = api_client.get_tool(tool['biotoolsID'])
+                    
+                    if full_tool:
+                        # Run quality analysis
+                        analysis = self.analyze_tool_quality(full_tool)
+                        
+                        if analysis and analysis.get('report'):
+                            # Add collection context
+                            analysis['collection_id'] = collection_id
+                            analysis['collection_name'] = collection_id
+                            results.append(analysis)
+                            print(f"DEBUG: Added analysis for {analysis.get('tool_name', 'Unknown')} to results. Total results: {len(results)}")
+                        else:
+                            print(f"DEBUG: No valid analysis generated for {tool.get('name', 'Unknown')}")
+                            if analysis:
+                                print(f"DEBUG: Analysis exists but missing report: {list(analysis.keys())}")
+                            else:
+                                print(f"DEBUG: Analysis is None")
+                    else:
+                        print(f"DEBUG: Failed to fetch full tool data for {tool.get('name', 'Unknown')}")
+                
+                except Exception as e:
+                    st.warning(f"Error analyzing tool {tool.get('name', 'Unknown')}: {str(e)}")
+                    continue
+            
+            progress_bar.progress(90)
+            status_text.text("� Generating collection report...")
+            
+            if not results:
+                st.error("No tools could be analyzed successfully.")
+                st.info("**Possible reasons:**")
+                st.write("- Tools may have invalid metadata that prevents analysis")
+                st.write("- Network issues when fetching tool data")  
+                st.write("- Quality analyzer configuration issues")
+                st.write("- Try reducing the number of tools to analyze")
+                return
+            
+            # Generate collection summary
+            print(f"DEBUG: About to display {len(results)} results")
+            self.display_collection_results(results, collection_id)
+            
+            progress_bar.progress(100)
+            status_text.text("✅ Collection analysis complete!")
+            
+            # Store results
+            st.session_state.current_analysis = {
+                'type': 'collection',
+                'collection_id': collection_id,
+                'results': results,
+                'timestamp': datetime.now()
+            }
+            
+        except Exception as e:
+            st.error(f"Error analyzing collection '{collection_id}': {str(e)}")
+            # Simple logging without accessing analyzer attributes
+            print(f"Collection analysis error: {str(e)}")
     
     def display_single_tool_results(self, analysis: dict):
         """Display results for a single tool analysis."""
@@ -532,7 +707,7 @@ class LiveBioToolsAnalyzer:
                 grade_counts = pd.Series(grades).value_counts()
                 fig = px.pie(values=grade_counts.values, names=grade_counts.index, 
                            title="Quality Grades")
-                st.plotly_chart(fig, width='stretch', key="grade_distribution_pie")
+                st.plotly_chart(fig, width='stretch', key=f"bulk_grade_distribution_pie_{uuid.uuid4().hex[:8]}")
             
             with col2:
                 st.subheader("Score Distribution")
@@ -541,7 +716,7 @@ class LiveBioToolsAnalyzer:
                     xaxis_title="Quality Score",
                     yaxis_title="Number of Tools"
                 )
-                st.plotly_chart(fig, width='stretch', key="score_distribution_hist")
+                st.plotly_chart(fig, width='stretch', key=f"bulk_score_distribution_hist_{uuid.uuid4().hex[:8]}")
         
         # Tools table
         st.subheader("📋 Analysis Summary Table")
@@ -565,7 +740,7 @@ class LiveBioToolsAnalyzer:
         
         if table_data:
             df = pd.DataFrame(table_data)
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, width='stretch', key=f"bulk_dataframe_{uuid.uuid4().hex[:8]}")
             
             # Download button
             csv = df.to_csv(index=False)
@@ -573,7 +748,8 @@ class LiveBioToolsAnalyzer:
                 label="📥 Download Results as CSV",
                 data=csv,
                 file_name=f"biotools_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
+                mime="text/csv",
+                key=f"bulk_download_csv_{uuid.uuid4().hex[:8]}"
             )
         
         # Individual tool details
@@ -581,7 +757,7 @@ class LiveBioToolsAnalyzer:
         tool_options = [f"{a['tool_id']} - {a['tool_name']}" for a in analyses if a]
         
         if tool_options:
-            selected_tool = st.selectbox("Select a tool to view details:", tool_options)
+            selected_tool = st.selectbox("Select a tool to view details:", tool_options, key=f"bulk_tool_select_{uuid.uuid4().hex[:8]}")
             
             if selected_tool:
                 tool_id = selected_tool.split(' - ')[0]
@@ -589,6 +765,197 @@ class LiveBioToolsAnalyzer:
                 
                 if selected_analysis:
                     self.display_single_tool_results(selected_analysis)
+    
+    def display_collection_results(self, analyses: List[dict], collection_id: str):
+        """Display results for collection analysis."""
+        if not analyses:
+            st.warning("No analysis results to display")
+            return
+        
+        st.header(f"📚 Collection Analysis: {collection_id}")
+        st.markdown(f"**{len(analyses)} tools analyzed**")
+        
+        # Create summary statistics
+        grades = []
+        scores = []
+        tiers = []
+        schema_valid_count = 0
+        lint_issues_total = 0
+        
+        for analysis in analyses:
+            if analysis and analysis.get('report') and hasattr(analysis['report'], 'metrics'):
+                metrics = analysis['report'].metrics
+                grades.append(getattr(metrics, 'quality_grade', 'F'))
+                scores.append(getattr(metrics, 'overall_score', 0))
+                tiers.append(getattr(metrics, 'standards_tier', 'Tier 1'))
+                
+                if getattr(metrics, 'schema_valid', False):
+                    schema_valid_count += 1
+                    
+                lint_issues_total += getattr(metrics, 'lint_issues', 0)
+        
+        # Collection overview metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("📊 Tools Analyzed", len(analyses))
+        
+        with col2:
+            avg_score = sum(scores) / len(scores) if scores else 0
+            st.metric("⭐ Average Quality", f"{avg_score:.1f}/100")
+        
+        with col3:
+            high_quality = sum(1 for g in grades if g in ['A', 'B'])
+            quality_pct = (high_quality / len(grades) * 100) if grades else 0
+            st.metric("🏆 High Quality", f"{quality_pct:.1f}%")
+        
+        with col4:
+            schema_pct = (schema_valid_count / len(analyses) * 100) if analyses else 0
+            st.metric("✅ Schema Valid", f"{schema_pct:.1f}%")
+        
+        # Additional collection insights
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Tier distribution
+            if tiers:
+                tier_counts = pd.Series(tiers).value_counts()
+                st.subheader("📊 Standards Tier Distribution")
+                tier_df = pd.DataFrame({
+                    'Tier': tier_counts.index,
+                    'Count': tier_counts.values,
+                    'Percentage': [round(count / len(tiers) * 100, 1) for count in tier_counts.values]
+                })
+                st.dataframe(tier_df, width='stretch', key=f"collection_tier_dataframe_{uuid.uuid4().hex[:8]}")
+        
+        with col2:
+            # Quality metrics
+            st.subheader("🔍 Quality Metrics")
+            st.markdown(f"""
+            - **Total Lint Issues:** {lint_issues_total}
+            - **Avg Issues per Tool:** {lint_issues_total / len(analyses):.1f}
+            - **Tools with Issues:** {sum(1 for a in analyses if a.get('report') and hasattr(a['report'], 'metrics') and getattr(a['report'].metrics, 'lint_issues', 0) > 0)}
+            """)
+        
+        # Visualizations
+        if grades and len(grades) > 1:
+            st.subheader("📈 Collection Quality Analysis")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Grade distribution pie chart
+                grade_counts = pd.Series(grades).value_counts()
+                fig = px.pie(
+                    values=grade_counts.values, 
+                    names=grade_counts.index,
+                    title=f"Quality Grade Distribution - {collection_id}",
+                    color_discrete_map={
+                        'A': '#28a745', 'B': '#6f42c1', 'C': '#ffc107', 
+                        'D': '#fd7e14', 'F': '#dc3545'
+                    }
+                )
+                st.plotly_chart(fig, width='stretch', key=f"collection_grade_pie_{uuid.uuid4().hex[:8]}")
+            
+            with col2:
+                # Score distribution histogram
+                fig = px.histogram(
+                    x=scores, 
+                    nbins=min(10, len(scores)),
+                    title=f"Quality Score Distribution - {collection_id}",
+                    labels={'x': 'Quality Score', 'y': 'Number of Tools'}
+                )
+                fig.update_layout(
+                    xaxis_title="Quality Score (0-100)",
+                    yaxis_title="Number of Tools"
+                )
+                st.plotly_chart(fig, width='stretch', key=f"collection_score_hist_{uuid.uuid4().hex[:8]}")
+        
+        # Detailed results table
+        st.subheader("📋 Detailed Tool Analysis")
+        
+        table_data = []
+        for analysis in analyses:
+            if analysis and analysis.get('report'):
+                report = analysis['report']
+                metrics = getattr(report, 'metrics', None)
+                
+                if metrics:
+                    tool_name = analysis.get('tool_name', 'Unknown')
+                    table_data.append({
+                        'Tool ID': analysis['tool_id'],
+                        'Tool Name': tool_name[:40] + ('...' if len(tool_name) > 40 else ''),
+                        'Quality Grade': getattr(metrics, 'quality_grade', 'N/A'),
+                        'Overall Score': f"{getattr(metrics, 'overall_score', 0):.1f}",
+                        'Standards Tier': getattr(metrics, 'standards_tier', 'N/A'),
+                        'Schema Valid': '✅' if getattr(metrics, 'schema_valid', False) else '❌',
+                        'Lint Issues': getattr(metrics, 'lint_issues', 0),
+                        'Last Updated': getattr(metrics, 'last_update', 'N/A')
+                    })
+        
+        if table_data:
+            df = pd.DataFrame(table_data)
+            
+            # Add sorting options
+            sort_col1, sort_col2 = st.columns(2)
+            with sort_col1:
+                sort_by = st.selectbox(
+                    "Sort by:",
+                    ['Quality Grade', 'Overall Score', 'Standards Tier', 'Lint Issues', 'Tool Name'],
+                    key="collection_sort"
+                )
+            with sort_col2:
+                ascending = st.checkbox("Ascending", key="collection_sort_asc")
+            
+            # Sort dataframe
+            if sort_by in df.columns:
+                if sort_by in ['Overall Score', 'Lint Issues']:
+                    df[sort_by] = pd.to_numeric(df[sort_by], errors='coerce')
+                df = df.sort_values(sort_by, ascending=ascending)
+            
+            st.dataframe(df, width='stretch', key=f"collection_main_dataframe_{uuid.uuid4().hex[:8]}")
+            
+            # Download buttons
+            col1, col2 = st.columns(2)
+            with col1:
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download as CSV",
+                    data=csv,
+                    file_name=f"biotools_collection_{collection_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    key=f"collection_download_csv_{uuid.uuid4().hex[:8]}"
+                )
+            
+            with col2:
+                json_data = df.to_json(orient='records', indent=2)
+                st.download_button(
+                    label="📥 Download as JSON",
+                    data=json_data,
+                    file_name=f"biotools_collection_{collection_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json",
+                    key=f"collection_download_json_{uuid.uuid4().hex[:8]}"
+                )
+        
+        # Individual tool inspection
+        st.subheader("🔍 Individual Tool Details")
+        
+        if analyses:
+            tool_options = [f"{a['tool_id']} - {a['tool_name']}" for a in analyses if a]
+            
+            selected_tool = st.selectbox(
+                "Select a tool to view detailed analysis:",
+                [''] + tool_options,
+                key="collection_tool_select"
+            )
+            
+            if selected_tool:
+                tool_id = selected_tool.split(' - ')[0]
+                selected_analysis = next((a for a in analyses if a and a['tool_id'] == tool_id), None)
+                
+                if selected_analysis:
+                    with st.expander(f"📊 Detailed Analysis: {selected_analysis['tool_name']}", expanded=True):
+                        self.display_single_tool_results(selected_analysis)
     
     def render_analysis_history(self):
         """Render analysis history sidebar."""
@@ -603,6 +970,7 @@ class LiveBioToolsAnalyzer:
     def run(self):
         """Run the Streamlit application."""
         self.render_header()
+        self.render_system_warnings()
         
         # Main content area
         if not MODULES_AVAILABLE:
@@ -615,7 +983,14 @@ class LiveBioToolsAnalyzer:
         
         # Main content
         if st.session_state.current_analysis:
-            self.display_single_tool_results(st.session_state.current_analysis)
+            # Check if this is a collection analysis
+            if (isinstance(st.session_state.current_analysis, dict) and 
+                st.session_state.current_analysis.get('type') == 'collection'):
+                # Collection analysis - display_collection_results is already called in analyze_collection
+                pass
+            else:
+                # Single tool analysis
+                self.display_single_tool_results(st.session_state.current_analysis)
         elif st.session_state.analysis_results:
             self.display_bulk_analysis_results(st.session_state.analysis_results)
         else:
