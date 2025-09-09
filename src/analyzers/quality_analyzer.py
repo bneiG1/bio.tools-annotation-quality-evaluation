@@ -162,6 +162,10 @@ class QualityAnalyzer:
         else:
             self.data_cleaner = None
     
+    def get_linter_warning(self) -> Optional[str]:
+        """Get the linter warning message if linter is not available."""
+        return self.linter.get_warning_message()
+    
     def analyze_tool(self, tool_data: Dict) -> QualityReport:
         """
         Perform comprehensive quality analysis on a tool.
@@ -215,43 +219,6 @@ class QualityAnalyzer:
             priority_fixes=priority_fixes,
             summary=summary
         )
-    
-    def analyze_tools_batch(self, tools_data: List[Dict]) -> List[QualityReport]:
-        """
-        Analyze multiple tools in batch.
-        
-        Args:
-            tools_data: List of tool metadata
-            
-        Returns:
-            List of quality reports
-        """
-        logger.info(f"Starting batch analysis of {len(tools_data)} tools")
-        
-        # Clean all tools in batch if enabled for better performance
-        if self.clean_data and self.data_cleaner:
-            logger.info("Cleaning tool data batch before analysis")
-            cleaned_tools_data = self.data_cleaner.clean_tools_batch(tools_data)
-        else:
-            cleaned_tools_data = tools_data
-        
-        reports = []
-        total_tools = len(cleaned_tools_data)
-        
-        for i, tool_data in enumerate(cleaned_tools_data):
-            try:
-                logger.info(f"Analyzing tool {i+1}/{total_tools}")
-                report = self.analyze_tool(tool_data)
-                reports.append(report)
-            except Exception as e:
-                tool_id = tool_data.get("biotoolsID", f"tool_{i}")
-                logger.error(f"Failed to analyze tool {tool_id}: {e}")
-                # Create a minimal error report
-                error_report = self._create_error_report(tool_data, str(e))
-                reports.append(error_report)
-        
-        logger.info(f"Completed batch analysis: {len(reports)} tools processed")
-        return reports
     
     def _calculate_metrics(
         self,
@@ -550,49 +517,4 @@ class QualityAnalyzer:
         
         return ". ".join(summary_parts) + "."
     
-    def _create_error_report(self, tool_data: Dict, error_message: str) -> QualityReport:
-        """Create a minimal error report for failed analysis."""
-        tool_id = tool_data.get("biotoolsID", "unknown")
-        tool_name = tool_data.get("name", "Unknown Tool")
-        
-        # Create minimal metrics indicating failure
-        metrics = QualityMetrics(
-            overall_score=0.0,
-            quality_grade="F",
-            standards_tier="UNKNOWN",
-            standards_score=0.0,
-            completeness_tier="NONE",
-            completeness_score=0.0,
-            schema_valid=False,
-            schema_errors=1,
-            schema_warnings=0,
-            lint_issues=1,
-            critical_issues=1,
-            error_issues=0,
-            warning_issues=0,
-            info_issues=0,
-            field_completeness=0.0,
-            required_fields_complete=False,
-            recommended_fields_complete=0.0,
-            url_health=0.0,
-            edam_consistency=0.0,
-            publication_quality=0.0,
-            has_functions=False,
-            has_documentation=False,
-            has_publications=False,
-            has_contacts=False,
-            analysis_date=datetime.now().isoformat()
-        )
-        
-        return QualityReport(
-            tool_id=tool_id,
-            tool_name=tool_name,
-            metrics=metrics,
-            standards_analysis={},
-            completeness_analysis={"achieved_tier_name": "NONE", "completeness_score": 0.0},
-            schema_results={"valid": False, "errors": [{"message": error_message}]},
-            lint_issues=[],
-            recommendations=[],
-            priority_fixes=[f"Fix analysis error: {error_message}"],
-            summary=f"Analysis failed for tool {tool_id}: {error_message}"
-        )
+

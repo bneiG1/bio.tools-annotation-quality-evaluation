@@ -76,12 +76,14 @@ class BiotoolsLinter:
         """Initialize the linter with proper path setup."""
         self._setup_linter_path()
         self._linter_available = self._check_linter_availability()
+        self._warning_message = None
         
         if not self._linter_available:
-            logger.warning(
+            self._warning_message = (
                 "Bio.tools linter not available. Linting functionality will be disabled. "
                 "Make sure the biotools-linter directory is present in the project root."
             )
+            logger.warning(self._warning_message)
     
     def _setup_linter_path(self):
         """Add the linter directory to Python path for imports."""
@@ -114,6 +116,10 @@ class BiotoolsLinter:
     def is_available(self) -> bool:
         """Check if the linter is available for use."""
         return self._linter_available
+    
+    def get_warning_message(self) -> Optional[str]:
+        """Get the warning message if linter is not available."""
+        return self._warning_message
     
     def lint_tool(self, tool_data: Dict) -> List[LintIssue]:
         """

@@ -222,168 +222,77 @@ class BioToolsAPIClient:
         params.update(filters)
         
         return self._make_request(self.TOOLS_ENDPOINT, params)
-    
-    def get_all_tools(
+
+    def search_by_collection(
         self,
-        batch_size: int = 25,
-        max_tools: Optional[int] = None,
-        start_page: int = 1,
+        collection_id: str,
+        page: int = 1,
+        format: str = "json",
+        sort: str = "lastUpdate",
+        order: str = "desc",
+        size: Optional[int] = None,
         **filters
-    ) -> Iterator[Dict]:
+    ) -> Dict:
         """
-        Generator to fetch all tools from bio.tools.
+        Search tools by collection ID.
         
         Args:
-            batch_size: Number of tools per page
-            max_tools: Maximum number of tools to fetch (None for all)
-            start_page: Page number to start from (useful for resuming)
-            **filters: Filter parameters
-            
-        Yields:
-            Individual tool dictionaries
-        """
-        page = start_page
-        total_fetched = 0
-        
-        logger.info(f"Starting to fetch tools from page {start_page}")
-        
-        while True:
-            try:
-                response = self.list_tools(page=page, **filters)
-                tools = response.get("list", [])
-                
-                if not tools:
-                    logger.info("No more tools to fetch")
-                    break
-                
-                for tool in tools:
-                    if max_tools and total_fetched >= max_tools:
-                        logger.info(f"Reached maximum tools limit: {max_tools}")
-                        return
-                    
-                    yield tool
-                    total_fetched += 1
-                
-                # Check if we have more pages
-                if "next" not in response or not response["next"]:
-                    logger.info(f"Reached last page. Total tools fetched: {total_fetched}")
-                    break
-                
-                page += 1
-                
-                # Log progress every 10 pages
-                if page % 10 == 0:
-                    logger.info(f"Fetched {total_fetched} tools, moving to page {page}")
-                
-            except Exception as e:
-                logger.error(f"Error fetching page {page}: {e}")
-                break
-    
-    def count_cached_tools(self) -> int:
-        """
-        Count the number of tools already cached.
-        
-        Returns:
-            Number of cached tool files
-        """
-        if not self.cache_dir or not self.cache_dir.exists():
-            return 0
-        
-        cached_files = list(self.cache_dir.glob("tool__*.json"))
-        return len(cached_files)
-    
-    def clear_cache(self) -> int:
-        """
-        Clear all cached tool data.
-        
-        Returns:
-            Number of files deleted
-        """
-        if not self.cache_dir or not self.cache_dir.exists():
-            return 0
-        
-        cached_files = list(self.cache_dir.glob("tool__*.json"))
-        deleted_count = 0
-        
-        for cache_file in cached_files:
-            try:
-                cache_file.unlink()
-                deleted_count += 1
-            except Exception as e:
-                logger.warning(f"Failed to delete cache file {cache_file}: {e}")
-        
-        logger.info(f"Cleared {deleted_count} cached tool files")
-        return deleted_count
-    
-    def get_cache_info(self) -> Dict:
-        """
-        Get information about the current cache.
-        
-        Returns:
-            Dictionary with cache statistics
-        """
-        if not self.cache_dir or not self.cache_dir.exists():
-            return {
-                'exists': False,
-                'file_count': 0,
-                'total_size_mb': 0,
-                'path': str(self.cache_dir) if self.cache_dir else None
-            }
-        
-        cached_files = list(self.cache_dir.glob("*.json"))
-        # Count tool files - both patterns used by the caching system
-        tool_files = [f for f in cached_files if f.name.startswith("tool_")]
-        total_size = sum(f.stat().st_size for f in cached_files)
-        
-        return {
-            'exists': True,
-            'file_count': len(cached_files),
-            'tool_files': len(tool_files),
-            'total_size_mb': total_size / (1024 * 1024),
-            'path': str(self.cache_dir)
-        }
-    
-    def get_stats(self) -> Dict:
-        """
-        Get bio.tools registry statistics.
-        
-        Returns:
-            Statistics data
-        """
-        return self._make_request(self.STATS_ENDPOINT)
-    
-    def search_tools(
-        self,
-        query: str,
-        max_results: Optional[int] = None,
-        **filters
-    ) -> List[Dict]:
-        """
-        Search for tools matching a query.
-        
-        Args:
-            query: Search query
-            max_results: Maximum number of results
+            collection_id: The collection ID to search for
+            page: Page number for pagination
+            format: Response format
+            sort: Sort field (lastUpdate, additionDate, name, affiliation, score)
+            order: Sort order (desc, asc)
+            size: Maximum number of tools to return (will fetch multiple pages if needed)
             **filters: Additional filter parameters
             
         Returns:
-            List of matching tools
+            Paginated list of tools in the collection
         """
-        tools = []
+        params = {
+            "page": page,
+            "format": format,
+            "sort": sort,
+            "ord": order,
+            "collectionID": collection_id
+        }
         
-        for tool in self.get_all_tools(query=query, max_tools=max_results, **filters):
-            tools.append(tool)
+        # Add additional filter parameters
+        params.update(filters)
         
-        return tools
-    
-    def get_tools_by_collection(self, collection_id: str) -> List[Dict]:
-        """
-        Get all tools in a specific collection.
-        
-        Args:
-            collection_id: Collection identifier
+        # If size is specified and > 25 (default page size), fetch multiple pages
+        if size and size > 25:
+            all_tools = []
+            current_page = page
+            tools_collected = 0
+            last_response = None
             
-        Returns:
-            List of tools in the collection
-        """
-        return self.search_tools(query="", collectionID=f'"{collection_id}"')
+            while tools_collected < size:
+                params["page"] = current_page
+                last_response = self._make_request(self.TOOLS_ENDPOINT, params)
+                
+                tools = last_response.get('list', [])
+                if not tools:
+                    break
+                
+                # Add tools up to the size limit
+                remaining_needed = size - tools_collected
+                tools_to_add = tools[:remaining_needed]
+                all_tools.extend(tools_to_add)
+                tools_collected += len(tools_to_add)
+                
+                # If we got fewer tools than page size, we've reached the end
+                if len(tools) < 25:
+                    break
+                    
+                current_page += 1
+            
+            # Return response with combined tools
+            return {
+                'count': last_response.get('count', len(all_tools)) if last_response else len(all_tools),
+                'list': all_tools,
+                'next': last_response.get('next') if last_response and tools_collected < last_response.get('count', 0) else None,
+                'previous': last_response.get('previous') if last_response and page > 1 else None
+            }
+        else:
+            return self._make_request(self.TOOLS_ENDPOINT, params)
+
