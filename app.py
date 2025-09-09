@@ -1035,8 +1035,31 @@ class LiveBioToolsAnalyzer:
 
 def main():
     """Main application entry point."""
-    app = LiveBioToolsAnalyzer()
-    app.run()
+    try:
+        # Log startup information
+        import os
+        print(f"🔬 Starting Bio.tools Live Quality Analyzer...")
+        print(f"📍 Working directory: {os.getcwd()}")
+        print(f"🐍 Python: {sys.version}")
+        print(f"📦 Modules available: {MODULES_AVAILABLE}")
+        
+        # Check if running in deployment
+        if 'STREAMLIT_SERVER_PORT' in os.environ:
+            print(f"🚀 Deployment mode detected")
+        else:
+            print(f"💻 Local mode detected")
+        
+        app = LiveBioToolsAnalyzer()
+        app.run()
+        
+    except Exception as e:
+        print(f"❌ Failed to start application: {e}")
+        import traceback
+        print(f"📋 Traceback:\n{traceback.format_exc()}")
+        # Still try to show a basic Streamlit page
+        st.error(f"Application startup failed: {e}")
+        st.text("Check the server logs for more details.")
+        raise
 
 
 if __name__ == "__main__":
