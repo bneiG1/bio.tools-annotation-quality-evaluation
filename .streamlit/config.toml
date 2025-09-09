@@ -24,13 +24,13 @@ fileWatcherType = "auto"
 cookieSecret = "bio-tools-quality-dashboard-secret-key"
 
 # If false, will attempt to open a browser window on start.
-headless = false
+headless = true
 
 # Automatically rerun script when the file is modified on disk.
 runOnSave = false
 
 # The address where the server will listen for client and browser connections. Use this if you want to bind the server to a specific address. If set, the server will only be accessible from this address, and not from any aliases (like localhost).
-address = "localhost"
+address = "0.0.0.0"
 
 # The port where the server will listen for browser connections.
 port = 8501
@@ -39,10 +39,10 @@ port = 8501
 baseUrlPath = ""
 
 # Enables support for Cross-Origin Resource Sharing (CORS) protection, for added security.
-enableCORS = true
+enableCORS = false
 
 # Enables support for Cross-Site Request Forgery (XSRF) protection, for added security.
-enableXsrfProtection = true
+enableXsrfProtection = false
 
 # Max size, in megabytes, for files uploaded with the file_uploader.
 maxUploadSize = 200
