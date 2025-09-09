@@ -305,16 +305,27 @@ class UnifiedBioToolsCLI:
         
         self.logger.info(f"Raw bulk data saved to: {bulk_filepath}")
         
-        # Save individual tool files
-        individual_dir = output_dir / f"individual_tools_{timestamp}"
+        # Save individual tool files with tool names
+        individual_dir = output_dir / "individual_tools"
         individual_dir.mkdir(exist_ok=True)
         
         self.logger.info(f"Saving individual tool files to: {individual_dir}")
         for i, tool_data in enumerate(tools_data, 1):
             tool_id = tool_data.get('biotoolsID', f'unknown_{i}')
-            # Clean tool_id for filename
-            safe_tool_id = "".join(c for c in tool_id if c.isalnum() or c in ('_', '-', '.')).rstrip()
-            tool_filename = f"{safe_tool_id}.json"
+            tool_name = tool_data.get('name', tool_id)
+            
+            # Create filename from tool name or tool_id
+            display_name = tool_name if tool_name and tool_name != tool_id else tool_id
+            
+            # Clean name for filename - more aggressive cleaning for tool names
+            safe_name = "".join(c for c in display_name if c.isalnum() or c in ('_', '-', '.', ' ')).strip()
+            safe_name = safe_name.replace(' ', '_')  # Replace spaces with underscores
+            
+            # Fallback to tool_id if name cleaning results in empty string
+            if not safe_name:
+                safe_name = "".join(c for c in tool_id if c.isalnum() or c in ('_', '-', '.')).rstrip()
+                
+            tool_filename = f"{safe_name}.json"
             tool_filepath = individual_dir / tool_filename
             
             with open(tool_filepath, 'w', encoding='utf-8') as f:
@@ -506,6 +517,43 @@ class UnifiedBioToolsCLI:
             json.dump(reports_data, f, indent=2, ensure_ascii=False, default=str)
         
         self.logger.info(f"JSON export saved to: {output_path}")
+        
+        # Also save individual processed analysis files with tool names
+        self.save_individual_processed_reports(reports, output_path.parent)
+    
+    def save_individual_processed_reports(self, reports: List[QualityReport], output_dir: Path) -> None:
+        """Save individual processed analysis reports with tool names."""
+        individual_processed_dir = output_dir / "individual_analyses"
+        individual_processed_dir.mkdir(exist_ok=True)
+        
+        self.logger.info(f"Saving individual processed analysis files to: {individual_processed_dir}")
+        
+        for i, report in enumerate(reports, 1):
+            tool_id = report.tool_id
+            tool_name = report.tool_name
+            
+            # Create filename from tool name or tool_id
+            display_name = tool_name if tool_name and tool_name != tool_id else tool_id
+            
+            # Clean name for filename - more aggressive cleaning for tool names
+            safe_name = "".join(c for c in display_name if c.isalnum() or c in ('_', '-', '.', ' ')).strip()
+            safe_name = safe_name.replace(' ', '_')  # Replace spaces with underscores
+            
+            # Fallback to tool_id if name cleaning results in empty string
+            if not safe_name:
+                safe_name = "".join(c for c in tool_id if c.isalnum() or c in ('_', '-', '.')).rstrip()
+                
+            analysis_filename = f"{safe_name}.json"
+            analysis_filepath = individual_processed_dir / analysis_filename
+            
+            # Save the individual analysis report
+            with open(analysis_filepath, 'w', encoding='utf-8') as f:
+                json.dump(report.to_dict(), f, indent=2, ensure_ascii=False, default=str)
+            
+            if i % 1000 == 0:
+                self.logger.info(f"Saved {i}/{len(reports)} individual analysis files")
+        
+        self.logger.info(f"All individual analysis files saved to: {individual_processed_dir}")
     
     async def run_async(self, args):
         """Main async CLI execution logic."""

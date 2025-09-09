@@ -842,6 +842,51 @@ class UnifiedBioToolsAPIClient:
         logger.info(f"Successfully fetched {len(all_tools)} total tools from bio.tools")
         return all_tools
 
+    def save_individual_raw_tools(self, tools_data: List[Dict], output_dir: Path, timestamp: Optional[str] = None) -> Path:
+        """
+        Save individual raw tool data with tool names as filenames.
+        
+        Args:
+            tools_data: List of tool data dictionaries
+            output_dir: Directory to save individual files
+            timestamp: Optional timestamp string for directory naming (unused now)
+            
+        Returns:
+            Path to the directory containing individual files
+        """
+        individual_dir = output_dir / "individual_tools"
+        individual_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"Saving {len(tools_data)} individual raw tool files to: {individual_dir}")
+        
+        for i, tool_data in enumerate(tools_data, 1):
+            tool_id = tool_data.get('biotoolsID', f'unknown_{i}')
+            tool_name = tool_data.get('name', tool_id)
+            
+            # Create filename from tool name or tool_id
+            display_name = tool_name if tool_name and tool_name != tool_id else tool_id
+            
+            # Clean name for filename - more aggressive cleaning for tool names
+            safe_name = "".join(c for c in display_name if c.isalnum() or c in ('_', '-', '.', ' ')).strip()
+            safe_name = safe_name.replace(' ', '_')  # Replace spaces with underscores
+            
+            # Fallback to tool_id if name cleaning results in empty string
+            if not safe_name:
+                safe_name = "".join(c for c in tool_id if c.isalnum() or c in ('_', '-', '.')).rstrip()
+                
+            tool_filename = f"{safe_name}.json"
+            tool_filepath = individual_dir / tool_filename
+            
+            # Save individual tool data
+            with open(tool_filepath, 'w', encoding='utf-8') as f:
+                json.dump(tool_data, f, indent=2, ensure_ascii=False)
+            
+            if i % 100 == 0:
+                logger.info(f"Saved {i}/{len(tools_data)} individual raw tool files")
+        
+        logger.info(f"All individual raw tool files saved to: {individual_dir}")
+        return individual_dir
+
 
 def create_async_client(
     config: Optional[ParallelProcessingConfig] = None,

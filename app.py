@@ -1660,6 +1660,128 @@ class LiveBioToolsAnalyzer:
                 
             else:
                 st.info("No valid analyses available for detailed export.")
+            
+            # Individual file downloads section
+            st.markdown("### 📁 Individual Tool Files")
+            
+            if valid_analyses:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**📄 Raw Tool Data (Individual JSON files)**")
+                    
+                    # Create a ZIP file with individual raw tool files
+                    if st.button("🗂️ Prepare Individual Raw Files", key="prepare_raw_files"):
+                        with st.spinner("Preparing individual raw tool files..."):
+                            try:
+                                # Import the API client
+                                from src.collectors.async_biotools_api import UnifiedBioToolsAPIClient
+                                import zipfile
+                                import io
+                                
+                                # Prepare raw tool data
+                                raw_tools_data = []
+                                for analysis in valid_analyses:
+                                    if analysis.get('raw_data'):
+                                        raw_tools_data.append(analysis['raw_data'])
+                                
+                                if raw_tools_data:
+                                    # Create ZIP file in memory
+                                    zip_buffer = io.BytesIO()
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    
+                                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                                        for tool_data in raw_tools_data:
+                                            tool_id = tool_data.get('biotoolsID', 'unknown')
+                                            tool_name = tool_data.get('name', tool_id)
+                                            
+                                            # Create filename from tool name or tool_id
+                                            display_name = tool_name if tool_name and tool_name != tool_id else tool_id
+                                            
+                                            # Clean name for filename
+                                            safe_name = "".join(c for c in display_name if c.isalnum() or c in ('_', '-', '.', ' ')).strip()
+                                            safe_name = safe_name.replace(' ', '_')
+                                            
+                                            if not safe_name:
+                                                safe_name = "".join(c for c in tool_id if c.isalnum() or c in ('_', '-', '.')).rstrip()
+                                            
+                                            filename = f"{safe_name}.json"
+                                            
+                                            # Add to ZIP
+                                            zip_file.writestr(filename, json.dumps(tool_data, indent=2, ensure_ascii=False))
+                                    
+                                    zip_buffer.seek(0)
+                                    
+                                    # Provide download button
+                                    st.download_button(
+                                        label="💾 Download Raw Files ZIP",
+                                        data=zip_buffer.getvalue(),
+                                        file_name=f"biotools_raw_files_{timestamp}.zip",
+                                        mime="application/zip",
+                                        key=f"download_raw_zip_{uuid.uuid4().hex[:8]}"
+                                    )
+                                    
+                                    st.success(f"✅ Prepared {len(raw_tools_data)} individual raw tool files")
+                                else:
+                                    st.warning("No raw tool data available")
+                                    
+                            except Exception as e:
+                                st.error(f"Error preparing raw files: {str(e)}")
+                
+                with col2:
+                    st.markdown("**📊 Processed Analysis Data (Individual JSON files)**")
+                    
+                    # Create a ZIP file with individual analysis files
+                    if st.button("🗂️ Prepare Individual Analysis Files", key="prepare_analysis_files"):
+                        with st.spinner("Preparing individual analysis files..."):
+                            try:
+                                import zipfile
+                                import io
+                                
+                                if valid_reports:
+                                    # Create ZIP file in memory
+                                    zip_buffer = io.BytesIO()
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    
+                                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                                        for report in valid_reports:
+                                            tool_id = report.tool_id
+                                            tool_name = report.tool_name
+                                            
+                                            # Create filename from tool name or tool_id
+                                            display_name = tool_name if tool_name and tool_name != tool_id else tool_id
+                                            
+                                            # Clean name for filename
+                                            safe_name = "".join(c for c in display_name if c.isalnum() or c in ('_', '-', '.', ' ')).strip()
+                                            safe_name = safe_name.replace(' ', '_')
+                                            
+                                            if not safe_name:
+                                                safe_name = "".join(c for c in tool_id if c.isalnum() or c in ('_', '-', '.')).rstrip()
+                                            
+                                            filename = f"{safe_name}.json"
+                                            
+                                            # Add to ZIP
+                                            zip_file.writestr(filename, json.dumps(report.to_dict(), indent=2, ensure_ascii=False, default=str))
+                                    
+                                    zip_buffer.seek(0)
+                                    
+                                    # Provide download button
+                                    st.download_button(
+                                        label="💾 Download Analysis Files ZIP",
+                                        data=zip_buffer.getvalue(),
+                                        file_name=f"biotools_analysis_files_{timestamp}.zip",
+                                        mime="application/zip",
+                                        key=f"download_analysis_zip_{uuid.uuid4().hex[:8]}"
+                                    )
+                                    
+                                    st.success(f"✅ Prepared {len(valid_reports)} individual analysis files")
+                                else:
+                                    st.warning("No analysis reports available")
+                                    
+                            except Exception as e:
+                                st.error(f"Error preparing analysis files: {str(e)}")
+            else:
+                st.info("No tools available for individual file downloads.")
         
         # Individual tool details
         st.subheader("🔍 Individual Tool Details")

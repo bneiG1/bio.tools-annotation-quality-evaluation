@@ -96,6 +96,9 @@ class QualityReporter:
             export_data = [report.to_dict() for report in reports]
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(export_data, f, indent=2, ensure_ascii=False)
+            
+            # Also save individual analysis files with tool names
+            self.save_individual_analyses(reports, timestamp)
         
         elif format == "excel":
             if not EXCEL_AVAILABLE:
@@ -647,3 +650,37 @@ class QualityReporter:
         # Sort by frequency
         sorted_issues = sorted(issue_counts.items(), key=lambda x: x[1], reverse=True)
         return sorted_issues
+
+    def save_individual_analyses(self, reports: List[QualityReport], timestamp: str) -> None:
+        """Save individual analysis reports with tool names."""
+        individual_dir = self.output_dir / "individual_analyses"
+        individual_dir.mkdir(exist_ok=True)
+        
+        logger.info(f"Saving individual analysis files to: {individual_dir}")
+        
+        for i, report in enumerate(reports, 1):
+            tool_id = report.tool_id
+            tool_name = report.tool_name
+            
+            # Create filename from tool name or tool_id
+            display_name = tool_name if tool_name and tool_name != tool_id else tool_id
+            
+            # Clean name for filename - more aggressive cleaning for tool names
+            safe_name = "".join(c for c in display_name if c.isalnum() or c in ('_', '-', '.', ' ')).strip()
+            safe_name = safe_name.replace(' ', '_')  # Replace spaces with underscores
+            
+            # Fallback to tool_id if name cleaning results in empty string
+            if not safe_name:
+                safe_name = "".join(c for c in tool_id if c.isalnum() or c in ('_', '-', '.')).rstrip()
+                
+            analysis_filename = f"{safe_name}.json"
+            analysis_filepath = individual_dir / analysis_filename
+            
+            # Save the individual analysis report
+            with open(analysis_filepath, 'w', encoding='utf-8') as f:
+                json.dump(report.to_dict(), f, indent=2, ensure_ascii=False, default=str)
+            
+            if i % 100 == 0:
+                logger.info(f"Saved {i}/{len(reports)} individual analysis files")
+        
+        logger.info(f"All individual analysis files saved to: {individual_dir}")
