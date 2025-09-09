@@ -45,6 +45,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Add health check for deployment platforms
+if 'health_check' not in st.session_state:
+    st.session_state.health_check = {
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'modules_available': MODULES_AVAILABLE
+    }
+
 # Custom CSS for better styling
 st.markdown("""
 <style>

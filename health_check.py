@@ -10,24 +10,24 @@ from pathlib import Path
 
 def check_python_version():
     """Check Python version compatibility."""
-    print(f"✓ Python version: {sys.version}")
+    print(f"Python version: {sys.version}")
     if sys.version_info < (3, 8):
-        print("❌ Python 3.8+ required")
+        print("ERROR: Python 3.8+ required")
         return False
     return True
 
 def check_modules():
     """Check if required modules are available."""
-    print("\n📦 Checking modules...")
+    print("\nChecking modules...")
     
     # Check standard library modules
     standard_modules = ['json', 'sys', 'logging', 'time', 'pathlib', 'datetime', 'asyncio']
     for module in standard_modules:
         try:
             __import__(module)
-            print(f"✓ {module}")
+            print(f"OK: {module}")
         except ImportError as e:
-            print(f"❌ {module}: {e}")
+            print(f"ERROR: {module}: {e}")
             return False
     
     # Check third-party modules
@@ -35,13 +35,13 @@ def check_modules():
     for module in third_party_modules:
         try:
             __import__(module)
-            print(f"✓ {module}")
+            print(f"OK: {module}")
         except ImportError as e:
-            print(f"❌ {module}: {e}")
+            print(f"ERROR: {module}: {e}")
             return False
     
     # Check custom modules
-    print("\n🔧 Checking custom modules...")
+    print("\nChecking custom modules...")
     sys.path.append(str(Path(__file__).parent / 'src'))
     
     custom_modules = [
@@ -53,15 +53,15 @@ def check_modules():
     for module in custom_modules:
         try:
             __import__(module)
-            print(f"✓ {module}")
+            print(f"OK: {module}")
         except ImportError as e:
-            print(f"⚠️ {module}: {e}")
+            print(f"WARNING: {module}: {e}")
     
     return True
 
 def check_files():
     """Check if required files exist."""
-    print("\n📁 Checking files...")
+    print("\nChecking files...")
     
     app_dir = Path(__file__).parent
     required_files = [
@@ -76,19 +76,19 @@ def check_files():
     for file_path in required_files:
         full_path = app_dir / file_path
         if full_path.exists():
-            print(f"✓ {file_path}")
+            print(f"OK: {file_path}")
         else:
-            print(f"❌ {file_path} not found")
+            print(f"ERROR: {file_path} not found")
             return False
     
     return True
 
 def check_environment():
     """Check environment variables and settings."""
-    print("\n🌍 Environment info...")
-    print(f"✓ Current directory: {os.getcwd()}")
-    print(f"✓ Script directory: {Path(__file__).parent}")
-    print(f"✓ Python path: {sys.executable}")
+    print("\nEnvironment info...")
+    print(f"Current directory: {os.getcwd()}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print(f"Python path: {sys.executable}")
     
     # Check if running in deployment environment
     deployment_indicators = [
@@ -103,17 +103,17 @@ def check_environment():
     for indicator in deployment_indicators:
         if indicator in os.environ:
             deployment_env = indicator
-            print(f"✓ Deployment environment detected: {indicator}")
+            print(f"Deployment environment detected: {indicator}")
             break
     
     if not deployment_env:
-        print("✓ Local environment detected")
+        print("Local environment detected")
     
     return True
 
 def main():
     """Run all health checks."""
-    print("🔬 Bio.tools Live Quality Analyzer - Health Check")
+    print("Bio.tools Live Quality Analyzer - Health Check")
     print("=" * 50)
     
     checks = [
@@ -130,15 +130,15 @@ def main():
             if not result:
                 all_passed = False
         except Exception as e:
-            print(f"❌ {check_name} check failed: {e}")
+            print(f"ERROR: {check_name} check failed: {e}")
             all_passed = False
     
     print("\n" + "=" * 50)
     if all_passed:
-        print("✅ All health checks passed!")
+        print("SUCCESS: All health checks passed!")
         print("The app should be ready to run.")
     else:
-        print("❌ Some health checks failed.")
+        print("FAILED: Some health checks failed.")
         print("Please fix the issues above before deploying.")
     
     return 0 if all_passed else 1
