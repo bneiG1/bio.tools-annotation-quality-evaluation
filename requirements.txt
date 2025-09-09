@@ -13,6 +13,10 @@ boltons
 numpy>=1.21.0
 openpyxl>=3.0.0
 
+# CLI dependencies
+click>=8.0.0
+argparse
+
 # Linter dependencies (used by biotools-linter submodule)
 owlready2
 rdflib

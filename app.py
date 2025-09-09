@@ -504,8 +504,11 @@ class LiveBioToolsAnalyzer:
         # Main content container
         st.markdown('<div class="main-content"><div class="content-container">', unsafe_allow_html=True)
         
+        # Get total biotools count for display
+        total_biotools = self.get_total_biotools_count()
+        
         # Stats/Welcome section
-        st.markdown("""
+        st.markdown(f"""
         <div class="stats-container">
             <div class="stats-title">Systematic Evaluation and Enhancement of bio.tools Annotation Quality</div>
             <p style="color: #666; margin-bottom: 1.5rem;">
@@ -514,7 +517,7 @@ class LiveBioToolsAnalyzer:
             </p>
             <div class="stats-grid">
                 <div class="stat-item">
-                    <span class="stat-value">30,538</span>
+                    <span class="stat-value">{total_biotools:,}</span>
                     <div class="stat-label">Tools Available</div>
                 </div>
                 <div class="stat-item">
@@ -535,9 +538,6 @@ class LiveBioToolsAnalyzer:
         
         # Direct search interface (no tabs)
         self.render_search_tools_interface()
-        
-        # Cache management section (collapsible)
-        self.render_cache_management()
         
         # Add analysis history under the search interface
         self.render_analysis_history()
@@ -562,14 +562,6 @@ class LiveBioToolsAnalyzer:
                 help="Enter the exact bio.tools ID of the tool you want to analyze",
                 label_visibility="visible"
             )
-            
-            # Show cache status if tool ID is entered
-            if tool_id and len(tool_id) > 2:  # Only check for reasonable tool IDs
-                is_cached = self.is_tool_cached(tool_id)
-                if is_cached:
-                    st.success(f"💾 Tool '{tool_id}' is cached locally")
-                else:
-                    st.info(f"🌐 Tool '{tool_id}' will be downloaded from bio.tools API")
         
         with col2:
             st.write("")  # Space for alignment
@@ -630,12 +622,15 @@ class LiveBioToolsAnalyzer:
             )
         
         with col2:
+            # Get total count dynamically for max_value
+            total_biotools = self.get_total_biotools_count()
+            
             max_tools = st.number_input(
                 "Max Tools",
                 min_value=1,
-                max_value=30000,
+                max_value=total_biotools,
                 value=10,
-                help="Maximum number of tools to analyze (bio.tools has ~27,000 tools)"
+                help=f"Maximum number of tools to analyze (bio.tools has ~{total_biotools:,} tools)"
             )
             
             # Show performance warning for large numbers
@@ -808,112 +803,25 @@ class LiveBioToolsAnalyzer:
                 raise ImportError("QualityAnalyzer not available")
         return self._quality_analyzer
     
-    def get_cache_stats(self):
-        """Get cache statistics."""
+    @st.cache_data(ttl=3600)  # Cache for 1 hour since total count doesn't change frequently
+    def get_total_biotools_count(_self) -> int:
+        """Get the total number of tools in bio.tools registry."""
         try:
-            api_client = self.get_api_client()
-            return api_client.get_cache_stats()
+            api_client = _self.get_api_client()
+            # Make a search request with minimal results to get the total count
+            result = api_client.list_tools(page=1, query="*")
+            return result.get('count', 30000)  # Fallback to a reasonable default
         except Exception as e:
-            return {'error': str(e)}
+            st.warning(f"Could not fetch total bio.tools count: {e}")
+            return 30000  # Fallback default
     
-    def clear_cache(self, tool_id: Optional[str] = None):
-        """Clear cache data."""
-        try:
-            api_client = self.get_api_client()
-            return api_client.clear_cache(tool_id)
-        except Exception as e:
-            st.error(f"Failed to clear cache: {e}")
-            return False
-    
-    def is_tool_cached(self, tool_id: str) -> bool:
-        """Check if a tool is cached."""
-        try:
-            api_client = self.get_api_client()
-            return api_client.is_tool_cached(tool_id)
-        except Exception as e:
-            return False
-    
-    def render_cache_management(self):
-        """Render cache management interface."""
-        with st.expander("💾 Cache Management", expanded=False):
-            cache_stats = self.get_cache_stats()
-            
-            if 'error' in cache_stats:
-                st.error(f"Error getting cache stats: {cache_stats['error']}")
-                return
-            
-            # Display cache statistics
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("Total Files", cache_stats.get('total_files', 0))
-            
-            with col2:
-                st.metric("Cache Size", f"{cache_stats.get('total_size_mb', 0)} MB")
-            
-            with col3:
-                st.metric("Tools Cached", cache_stats.get('tool_files', 0))
-            
-            with col4:
-                st.metric("Search Results", cache_stats.get('search_files', 0))
-            
-            # Cache management actions
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                if st.button("🗑️ Clear All Cache", help="Remove all cached data"):
-                    if self.clear_cache():
-                        st.success("Cache cleared successfully!")
-                        st.rerun()
-                    else:
-                        st.error("Failed to clear cache")
-            
-            with col2:
-                if st.button("🔄 Refresh Stats", help="Update cache statistics"):
-                    st.rerun()
-            
-            with col3:
-                # Show cache info
-                total_files = cache_stats.get('total_files', 0)
-                if isinstance(total_files, int) and total_files > 0:
-                    oldest_time = cache_stats.get('oldest_time')
-                    if oldest_time and isinstance(oldest_time, (int, float)):
-                        import datetime
-                        oldest_date = datetime.datetime.fromtimestamp(float(oldest_time))
-                        st.info(f"Oldest cache: {oldest_date.strftime('%Y-%m-%d %H:%M')}")
-            
-            # Cache information
-            st.markdown("""
-            **Cache Information:**
-            - Individual tools are cached indefinitely
-            - Search results expire after 24 hours
-            - Cache improves performance and reduces API calls
-            - Cached data includes metadata about when it was stored
-            """)
-
     @st.cache_data(ttl=300)  # Cache for 5 minutes
     def fetch_tool_data(_self, tool_id: str):
         """Fetch tool data from bio.tools API with caching."""
         try:
             api_client = _self.get_api_client()
             
-            # Check if tool is cached
-            is_cached = api_client.is_tool_cached(tool_id)
-            
             result = api_client.get_tool(tool_id)
-            
-            # Show cache information to user
-            if is_cached and '_cache_info' in result:
-                cache_info = result['_cache_info']
-                age_hours = cache_info.get('age_hours', 0)
-                if age_hours < 1:
-                    st.info(f"💾 Tool '{tool_id}' served from cache (less than 1 hour old)")
-                elif age_hours < 24:
-                    st.info(f"💾 Tool '{tool_id}' served from cache ({age_hours:.1f} hours old)")
-                else:
-                    st.info(f"💾 Tool '{tool_id}' served from cache ({age_hours/24:.1f} days old)")
-            elif not is_cached:
-                st.info(f"🌐 Tool '{tool_id}' downloaded from bio.tools API and cached locally")
             
             return result
         except Exception as e:
@@ -931,7 +839,6 @@ class LiveBioToolsAnalyzer:
             pages_needed = (max_tools + tools_per_page - 1) // tools_per_page
             
             all_tools = []
-            cached_count = 0
             
             for page in range(1, pages_needed + 1):
                 result = api_client.list_tools(
@@ -940,10 +847,6 @@ class LiveBioToolsAnalyzer:
                     sort=sort_by,
                     order=sort_order
                 )
-                
-                # Check if this was served from cache
-                if '_cache_info' in result:
-                    cached_count += 1
                 
                 tools = result.get('list', [])
                 all_tools.extend(tools)
@@ -955,11 +858,6 @@ class LiveBioToolsAnalyzer:
                 # Stop if no more tools available
                 if len(tools) < tools_per_page:
                     break
-            
-            # Show cache information to user
-            if cached_count > 0:
-                cache_msg = f"📦 {cached_count}/{pages_needed} search page(s) served from cache"
-                st.info(cache_msg)
             
             return all_tools[:max_tools]
             
