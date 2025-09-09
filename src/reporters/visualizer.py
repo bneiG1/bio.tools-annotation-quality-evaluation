@@ -815,6 +815,14 @@ class QualityReporter:
             'lint_issues_count': report.metrics.lint_issues,
             'lint_issues_content': self._generate_lint_issues_html(report.lint_issues),
             
+            # Schema validation details
+            'schema_details_content': self._generate_schema_details_html(report.schema_results),
+            
+            # Tier requirements
+            'current_tier': report.metrics.completeness_tier,
+            'current_tier_lower': report.metrics.completeness_tier.lower(),
+            'tier_requirements_content': self._generate_tier_requirements_html(report.completeness_analysis),
+            
             # Recommendations
             'recommendations_content': self._generate_recommendations_html(report),
             
@@ -885,6 +893,195 @@ class QualityReporter:
             html_parts.append("<p>No specific recommendations available. This tool has good quality overall.</p>")
         
         return ''.join(html_parts)
+    
+    def _generate_schema_details_html(self, schema_results: Dict) -> str:
+        """Generate HTML content for detailed schema validation results."""
+        if not schema_results:
+            return ""
+        
+        html_parts = []
+        
+        # Add detailed errors
+        errors = schema_results.get('errors', [])
+        if errors:
+            html_parts.append('<div class="schema-details">')
+            html_parts.append('<h3>Schema Errors</h3>')
+            
+            for error in errors[:10]:  # Limit to first 10 errors
+                path = error.get('path', 'unknown')
+                message = error.get('message', 'Unknown error')
+                validator = error.get('validator', '')
+                
+                html_parts.append(f'''
+                <div class="schema-item schema-error">
+                    <strong>{validator.upper() if validator else 'ERROR'}:</strong> {message}
+                    <br><span class="schema-path">Path: {path}</span>
+                </div>''')
+            
+            if len(errors) > 10:
+                html_parts.append(f'<p><em>... and {len(errors) - 10} more errors</em></p>')
+            
+            html_parts.append('</div>')
+        
+        # Add detailed warnings
+        warnings = schema_results.get('warnings', [])
+        if warnings:
+            html_parts.append('<div class="schema-details">')
+            html_parts.append('<h3>Schema Warnings</h3>')
+            
+            for warning in warnings[:10]:  # Limit to first 10 warnings
+                path = warning.get('path', 'unknown')
+                message = warning.get('message', 'Unknown warning')
+                validator = warning.get('validator', '')
+                
+                html_parts.append(f'''
+                <div class="schema-item schema-warning">
+                    <strong>{validator.upper() if validator else 'WARNING'}:</strong> {message}
+                    <br><span class="schema-path">Path: {path}</span>
+                </div>''')
+            
+            if len(warnings) > 10:
+                html_parts.append(f'<p><em>... and {len(warnings) - 10} more warnings</em></p>')
+            
+            html_parts.append('</div>')
+        
+        return ''.join(html_parts)
+    
+    def _generate_tier_requirements_html(self, completeness_analysis: Dict) -> str:
+        """Generate HTML content for tier requirements and progress."""
+        if not completeness_analysis:
+            return "<p>No tier analysis available.</p>"
+        
+        html_parts = []
+        
+        # Get tier information
+        tier_scores = completeness_analysis.get('tier_scores', {})
+        field_analysis = completeness_analysis.get('field_analysis', {})
+        achieved_tier = completeness_analysis.get('achieved_tier_name', 'SPARSE')
+        
+        # Define tier information
+        tier_info = {
+            'SPARSE': {
+                'name': 'Sparse',
+                'color': 'sparse',
+                'description': 'Basic tool information',
+                'fields': ['name', 'description', 'homepage', 'biotoolsID']
+            },
+            'MINIMAL': {
+                'name': 'Minimal', 
+                'color': 'minimal',
+                'description': 'Essential scientific information',
+                'fields': ['toolType', 'topic', 'publication', 'support']
+            },
+            'DETAILED': {
+                'name': 'Detailed',
+                'color': 'detailed', 
+                'description': 'Comprehensive tool details',
+                'fields': ['function', 'documentation', 'operatingSystem', 'language', 'license', 'input_output']
+            },
+            'COMPLETE': {
+                'name': 'Complete',
+                'color': 'complete',
+                'description': 'Full accessibility and availability',
+                'fields': ['accessibility', 'code_availability', 'downloads', 'supported_data_formats']
+            },
+            'COMPREHENSIVE': {
+                'name': 'Comprehensive',
+                'color': 'comprehensive', 
+                'description': 'Scientific validation and monitoring',
+                'fields': ['scientific_benchmark', 'technical_monitoring']
+            }
+        }
+        
+        # Generate tier sections
+        for tier_name, info in tier_info.items():
+            tier_achieved = tier_scores.get(tier_name, False)
+            is_current = (tier_name == achieved_tier)
+            
+            # Determine section class
+            section_class = "tier-section"
+            if tier_achieved:
+                section_class += " achieved"
+            elif is_current:
+                section_class += " current"
+            
+            html_parts.append(f'''
+            <div class="{section_class}">
+                <h4>
+                    <span class="tier-badge tier-{info['color']}">{info['name']}</span>
+                    {info['description']}
+                    {'✅' if tier_achieved else '❌'}
+                </h4>
+                <div class="field-list">''')
+            
+            # Show field requirements for this tier
+            for field in info['fields']:
+                field_present = self._check_field_present(field, field_analysis)
+                field_class = "field-present" if field_present else "field-missing"
+                field_icon = "✅" if field_present else "❌"
+                
+                html_parts.append(f'''
+                    <div class="{field_class}">
+                        {field_icon} {field.replace('_', ' ').title()}
+                    </div>''')
+            
+            html_parts.append('</div></div>')
+        
+        # Add next tier recommendations
+        next_tier_info = self._get_next_tier_info(achieved_tier, tier_info)
+        if next_tier_info:
+            html_parts.append(f'''
+            <div class="tier-section">
+                <h4>🎯 Next Tier: {next_tier_info['name']}</h4>
+                <p>To achieve <strong>{next_tier_info['name']}</strong> tier, add the following:</p>
+                <div class="field-list">''')
+            
+            for field in next_tier_info['fields']:
+                field_present = self._check_field_present(field, field_analysis)
+                if not field_present:
+                    html_parts.append(f'''
+                        <div class="field-missing">
+                            ❌ {field.replace('_', ' ').title()}
+                        </div>''')
+            
+            html_parts.append('</div></div>')
+        
+        return ''.join(html_parts)
+    
+    def _check_field_present(self, field_name: str, field_analysis: Dict) -> bool:
+        """Check if a field is present in the field analysis."""
+        # Handle different field analysis structures
+        if isinstance(field_analysis, dict):
+            # Look for the field directly
+            if field_name in field_analysis:
+                field_info = field_analysis[field_name]
+                if isinstance(field_info, dict):
+                    return field_info.get('present', False)
+                return bool(field_info)
+            
+            # Look in nested structures
+            for key, value in field_analysis.items():
+                if isinstance(value, dict) and field_name in value:
+                    field_info = value[field_name]
+                    if isinstance(field_info, dict):
+                        return field_info.get('present', False)
+                    return bool(field_info)
+        
+        return False
+    
+    def _get_next_tier_info(self, current_tier: str, tier_info: Dict) -> Optional[Dict]:
+        """Get information about the next tier to achieve."""
+        tier_order = ['SPARSE', 'MINIMAL', 'DETAILED', 'COMPLETE', 'COMPREHENSIVE']
+        
+        try:
+            current_index = tier_order.index(current_tier)
+            if current_index < len(tier_order) - 1:
+                next_tier = tier_order[current_index + 1]
+                return tier_info.get(next_tier)
+        except ValueError:
+            pass
+        
+        return None
     
     def _generate_fallback_html_report(self, report: QualityReport) -> str:
         """Generate a simple fallback HTML report if template is not available."""

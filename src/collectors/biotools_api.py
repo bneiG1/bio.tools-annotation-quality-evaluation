@@ -87,7 +87,7 @@ class BioToolsAPIClient:
         
         # Create a unique filename based on endpoint and params
         param_str = urlencode(sorted(params.items())) if params else ""
-        cache_filename = f"{endpoint.replace('/', '_')}_{hash(param_str)}.json"
+        cache_filename = f"{endpoint.replace('/', '')}.json"
         return self.cache_dir / cache_filename
     
     def _load_from_cache(self, cache_path: Path) -> Optional[Dict]:

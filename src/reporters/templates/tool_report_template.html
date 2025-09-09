@@ -156,6 +156,84 @@
             color: #dc3545;
             font-weight: bold;
         }}
+        .tier-badge {{
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }}
+        .tier-sparse {{
+            background: #6c757d;
+            color: white;
+        }}
+        .tier-minimal {{
+            background: #dc3545;
+            color: white;
+        }}
+        .tier-detailed {{
+            background: #fd7e14;
+            color: white;
+        }}
+        .tier-complete {{
+            background: #ffc107;
+            color: #212529;
+        }}
+        .tier-comprehensive {{
+            background: #28a745;
+            color: white;
+        }}
+        .tier-requirements {{
+            margin-top: 20px;
+        }}
+        .tier-section {{
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #dee2e6;
+        }}
+        .tier-section.achieved {{
+            border-left-color: #28a745;
+            background: #d4edda;
+        }}
+        .tier-section.current {{
+            border-left-color: #007bff;
+            background: #d1ecf1;
+        }}
+        .field-list {{
+            margin: 10px 0;
+            padding-left: 20px;
+        }}
+        .field-present {{
+            color: #28a745;
+        }}
+        .field-missing {{
+            color: #dc3545;
+        }}
+        .schema-details {{
+            margin-top: 15px;
+        }}
+        .schema-item {{
+            background: #f8f9fa;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-left: 3px solid #dee2e6;
+        }}
+        .schema-error {{
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }}
+        .schema-warning {{
+            border-left-color: #ffc107;
+            background: #fff3cd;
+        }}
+        .schema-path {{
+            font-family: monospace;
+            font-size: 0.85em;
+            color: #6c757d;
+        }}
     </style>
 </head>
 <body>
@@ -250,6 +328,19 @@
                 <p><strong>Status:</strong> <span class="{schema_status_class}">{schema_status}</span></p>
                 <p><strong>Errors:</strong> {schema_errors}</p>
                 <p><strong>Warnings:</strong> {schema_warnings}</p>
+                
+                {schema_details_content}
+            </div>
+            
+            <!-- Standards Tier Requirements -->
+            <div class="section">
+                <h2>Tool Information Standards Tiers</h2>
+                <div class="tier-requirements">
+                    <p><strong>Current Tier:</strong> <span class="tier-badge tier-{current_tier_lower}">{current_tier}</span></p>
+                    <p><strong>Completeness Score:</strong> {completeness_score}/100</p>
+                    
+                    {tier_requirements_content}
+                </div>
             </div>
             
             <!-- Lint Issues -->
