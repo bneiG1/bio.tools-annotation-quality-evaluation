@@ -623,7 +623,8 @@ class UnifiedBioToolsAPIClient:
             List of tool metadata dictionaries
         """
         # If requesting many tools or no limit, use pagination
-        if limit is None or limit > 100:
+        # Note: bio.tools API has a fixed page size of 50, so use pagination for requests > 50
+        if limit is None or limit > 50:
             return self._search_with_pagination(query, domain, format_filter, limit)
         
         # For small requests, use single page search
@@ -821,9 +822,16 @@ class UnifiedBioToolsAPIClient:
             if page_tools:
                 all_tools.extend(page_tools)
                 
-                # Check if we got fewer tools than requested (last page)
-                if len(page_tools) < batch_size:
+                # Check if we got fewer tools than the API's page size (50) - indicates last page
+                # Note: bio.tools API has a fixed page size of 50, don't use batch_size for this check
+                if len(page_tools) < 50:
                     logger.info(f"Reached last page (page {page})")
+                    break
+                
+                # Check if we have enough tools for the requested batch_size
+                if len(all_tools) >= batch_size:
+                    logger.info(f"Reached requested batch size of {batch_size} tools")
+                    all_tools = all_tools[:batch_size]  # Trim to exact size
                     break
                     
                 page += 1

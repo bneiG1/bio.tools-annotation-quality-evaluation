@@ -864,7 +864,8 @@ class LiveBioToolsAnalyzer:
             api_client = _self.get_api_client()
             
             # If requesting a large number of tools or all tools, use fetch_all_tools
-            if max_tools > 100 or query == "*":
+            # Note: bio.tools API page size is 50, so use pagination for requests > 50
+            if max_tools > 50 or query == "*":
                 logger.info(f"Large request detected ({max_tools} tools), using fetch_all_tools with pagination")
                 
                 if hasattr(api_client, 'fetch_all_tools'):
