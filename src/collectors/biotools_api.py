@@ -86,28 +86,69 @@ class BioToolsAPIClient:
             return None
         
         # Create a unique filename based on endpoint and params
+        import hashlib
+        
+        # For single tools, use simple naming
+        if endpoint.startswith(self.TOOLS_ENDPOINT) and "/" in endpoint:
+            # Extract tool ID from endpoint like "tool/blast/" -> "blast"
+            tool_id = endpoint.replace(self.TOOLS_ENDPOINT, "").rstrip("/")
+            if tool_id and not "/" in tool_id:  # Simple tool ID, not a complex path
+                cache_filename = f"tool_{tool_id}.json"
+                return self.cache_dir / cache_filename
+        
+        # For searches and other endpoints, use hash-based naming
         param_str = urlencode(sorted(params.items())) if params else ""
-        cache_filename = f"{endpoint.replace('/', '')}.json"
+        cache_key = f"{endpoint}_{param_str}"
+        cache_hash = hashlib.md5(cache_key.encode()).hexdigest()
+        cache_filename = f"search_{cache_hash}.json"
+        
         return self.cache_dir / cache_filename
     
     def _load_from_cache(self, cache_path: Path) -> Optional[Dict]:
-        """Load response from cache if it exists."""
+        """Load response from cache if it exists and is not too old."""
         if cache_path and cache_path.exists():
             try:
+                # Check file age for search results (expire after 24 hours)
+                # Individual tools are cached indefinitely unless manually cleared
+                import time
+                file_age = time.time() - cache_path.stat().st_mtime
+                
+                # If it's a search result, check age (24 hours = 86400 seconds)
+                if cache_path.name.startswith("search_") and file_age > 86400:
+                    logger.debug(f"Cache file {cache_path} is too old (search result), ignoring")
+                    return None
+                
                 with open(cache_path, 'r', encoding='utf-8') as f:
                     logger.debug(f"Loading from cache: {cache_path}")
-                    return json.load(f)
+                    cached_data = json.load(f)
+                    
+                    # Add cache metadata
+                    cached_data['_cache_info'] = {
+                        'cached_at': cache_path.stat().st_mtime,
+                        'cache_file': str(cache_path),
+                        'age_hours': file_age / 3600
+                    }
+                    
+                    return cached_data
             except (json.JSONDecodeError, IOError) as e:
                 logger.warning(f"Failed to load cache file {cache_path}: {e}")
         return None
     
     def _save_to_cache(self, cache_path: Path, data: Dict) -> None:
-        """Save response to cache."""
+        """Save response to cache with metadata."""
         if cache_path:
             try:
+                # Add cache metadata to the data before saving
+                data_to_save = data.copy()
+                data_to_save['_cache_info'] = {
+                    'cached_at': time.time(),
+                    'cache_file': str(cache_path),
+                    'age_hours': 0
+                }
+                
                 with open(cache_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
-                logger.debug(f"Saved to cache: {cache_path}")
+                    json.dump(data_to_save, f, indent=2, ensure_ascii=False)
+                logger.info(f"Saved to cache: {cache_path}")
             except IOError as e:
                 logger.warning(f"Failed to save cache file {cache_path}: {e}")
     
@@ -295,4 +336,99 @@ class BioToolsAPIClient:
             }
         else:
             return self._make_request(self.TOOLS_ENDPOINT, params)
+
+    def clear_cache(self, tool_id: Optional[str] = None) -> bool:
+        """
+        Clear cached data.
+        
+        Args:
+            tool_id: If provided, clear cache for specific tool. Otherwise clear all cache.
+            
+        Returns:
+            True if cache was cleared successfully
+        """
+        if not self.cache_dir or not self.cache_dir.exists():
+            return True
+        
+        try:
+            if tool_id:
+                # Clear specific tool cache
+                cache_file = self.cache_dir / f"tool_{tool_id}.json"
+                if cache_file.exists():
+                    cache_file.unlink()
+                    logger.info(f"Cleared cache for tool: {tool_id}")
+                return True
+            else:
+                # Clear all cache files
+                import shutil
+                shutil.rmtree(self.cache_dir)
+                self.cache_dir.mkdir(parents=True, exist_ok=True)
+                logger.info("Cleared all cache files")
+                return True
+        except Exception as e:
+            logger.error(f"Failed to clear cache: {e}")
+            return False
+    
+    def get_cache_stats(self) -> Dict:
+        """
+        Get statistics about cached data.
+        
+        Returns:
+            Dictionary with cache statistics
+        """
+        if not self.cache_dir or not self.cache_dir.exists():
+            return {
+                'total_files': 0,
+                'total_size_mb': 0,
+                'tool_files': 0,
+                'search_files': 0,
+                'oldest_file': None,
+                'newest_file': None
+            }
+        
+        try:
+            cache_files = list(self.cache_dir.glob("*.json"))
+            
+            total_size = sum(f.stat().st_size for f in cache_files)
+            tool_files = len([f for f in cache_files if f.name.startswith("tool_")])
+            search_files = len([f for f in cache_files if f.name.startswith("search_")])
+            
+            if cache_files:
+                oldest_file = min(cache_files, key=lambda f: f.stat().st_mtime)
+                newest_file = max(cache_files, key=lambda f: f.stat().st_mtime)
+                oldest_time = oldest_file.stat().st_mtime
+                newest_time = newest_file.stat().st_mtime
+            else:
+                oldest_file = newest_file = None
+                oldest_time = newest_time = None
+            
+            return {
+                'total_files': len(cache_files),
+                'total_size_mb': round(total_size / (1024 * 1024), 2),
+                'tool_files': tool_files,
+                'search_files': search_files,
+                'oldest_file': oldest_file.name if oldest_file else None,
+                'oldest_time': oldest_time,
+                'newest_file': newest_file.name if newest_file else None,
+                'newest_time': newest_time
+            }
+        except Exception as e:
+            logger.error(f"Failed to get cache stats: {e}")
+            return {'error': str(e)}
+    
+    def is_tool_cached(self, tool_id: str) -> bool:
+        """
+        Check if a tool is cached locally.
+        
+        Args:
+            tool_id: The bio.tools ID of the tool
+            
+        Returns:
+            True if tool is cached locally
+        """
+        if not self.cache_dir:
+            return False
+        
+        cache_file = self.cache_dir / f"tool_{tool_id}.json"
+        return cache_file.exists()
 
