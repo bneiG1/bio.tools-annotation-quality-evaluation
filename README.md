@@ -1,434 +1,162 @@
-# Bio.tools Annotation Quality Evaluation
+# Bio.tools Live Quality Analyzer
 
-A comprehensive bioinformatics data analysis pipeline for evaluating metadata quality in the ELIXIR bio.tools registry. This tool implements the Tool Information Standards framework to assess and improve the quality of tool annotations in bio.tools.
+A **Streamlit web application** for real-time analysis of bio.tools registry entries. This tool evaluates metadata quality, performs schema validation, and provides comprehensive quality scoring for bioinformatics tools.
 
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-
-## Features
-
-- **Standards-Based Assessment**: Implements the 5-tier Tool Information Standards (SPARSE to COMPREHENSIVE)
-- **Schema Validation**: Validates entries against the official biotoolsSchema
-- **Comprehensive Linting**: Extensive quality checks including URL validation, EDAM term consistency, and metadata completeness
-- **Interactive Visualizations**: Rich dashboards and charts for quality analysis
-- **Multiple Output Formats**: JSON, CSV, Excel, and HTML reports
-- **Batch Processing**: Analyze individual tools, collections, or entire registry subsets
-- **Caching Support**: Efficient API response caching to minimize requests
-
-## Installation
+## 🚀 Quick Start
 
 ### Prerequisites
+- Python 3.8+
+- Internet connection (for bio.tools API access)
 
-- Python 3.8 or higher
-- pip package manager
-
-### Setup
-
-1. Clone the repository:
-
+### Installation
 ```bash
-git clone https://github.com/your-username/bio.tools-annotation-quality-evaluation.git
+git clone <repository-url>
 cd bio.tools-annotation-quality-evaluation
-```
-
-2. Install dependencies:
-
-```bash
 pip install -r requirements.txt
 ```
 
-3. Create necessary directories:
-
+### Launch the Application
+**Option 1: Using Python**
 ```bash
-mkdir -p data/{raw,processed,reports,cache}
+python run_app.py
 ```
 
-## Quick Start
+**Option 2: Using Launcher Scripts**
+- Windows: Double-click `launch.bat`
+- PowerShell: `.\launch.ps1`
 
-### Analyze a Single Tool
+The application will open in your default web browser at `http://localhost:8501`
 
-```bash
-python main.py validate --tool-id signalp --show-details
-```
+## 🎯 Features
 
-### Analyze a Collection
-
-```bash
-python main.py analyze --collection "ELIXIR Tools" --generate-charts --create-dashboard
-```
-
-### Search and Analyze Tools
-
-```bash
-python main.py analyze --query "protein sequence analysis" --max-tools 50 --format excel
-```
-
-### Compare Tools
-
-```bash
-python main.py compare --query "blast" --max-tools 20
-```
-
-### Registry Statistics
-
-```bash
-python main.py stats
-```
-
-## Command Reference
-
-### Main Commands
-
-- `analyze` - Comprehensive quality analysis of bio.tools entries
-- `validate` - Quick validation of a single tool
-- `compare` - Comparative analysis across multiple tools
-- `batch` - Analyze tools from a local JSON file
-- `stats` - Show bio.tools registry statistics
-
-### Options
-
-- `--tool-id, -t` - Specific bio.tools ID to analyze
-- `--collection, -c` - Collection ID to analyze
-- `--query, -q` - Search query for tools
-- `--max-tools, -m` - Maximum number of tools to analyze
-- `--output-dir, -o` - Output directory for reports
-- `--format, -f` - Output format (json, csv, excel, html)
-- `--generate-charts` - Generate visualization charts
-- `--create-dashboard` - Create interactive HTML dashboard
-- `--verbose, -v` - Enable verbose logging
-- `--config, -c` - Configuration file path
-
-## Logging and Configuration
-
-### Logging System
-
-The application includes a comprehensive logging system with support for:
-
-- **Multiple Log Levels**: DEBUG, INFO, WARNING, ERROR
-- **Console and File Logging**: Configurable output destinations
-- **Log Rotation**: Automatic file rotation with size limits
-- **Analysis-Specific Logs**: Dedicated log files for different analysis runs
-- **Configuration-Based Setup**: YAML-based logging configuration
-
-#### Basic Usage
-
-```bash
-# Enable verbose logging
-python main.py --verbose analyze --tool-id blast
-
-# Use custom configuration
-python main.py --config config/production.yaml analyze --collection proteomics
-```
-
-#### Log Files
-
-Logs are stored in the `logs/` directory:
-
-- `biotools_quality_analysis.log` - Main application log
-- `analysis_name_timestamp.log` - Analysis-specific logs
-- `errors.log` - Error-only logs (if configured)
-
-### Configuration Files
-
-Create YAML configuration files to customize:
-
-```yaml
-system:
-  logging:
-    level: "INFO"
-    file_logging: true
-    console_logging: true
-    log_file: "biotools_quality_analysis.log"
-    max_log_size: 10485760  # 10MB
-    backup_count: 5
-  
-  api:
-    timeout: 30
-    max_retries: 3
-    rate_limit_delay: 0.1
-  
-scoring:
-  weights:
-    basic_info: 15
-    core_metadata: 25
-    technical_info: 20
-    accessibility: 20
-    advanced_features: 15
-    community: 5
-```
-
-See `config/default_config.yaml` for a complete configuration example.
-
-## Quality Assessment Framework
-
-### Tool Information Standards Tiers
-
-The tool implements the official bio.tools Tool Information Standards with 5 tiers:
-
-1. **SPARSE** - Minimum requirements (name, description, homepage, biotoolsID)
-2. **MINIMAL** - Basic scientific context (+ topic, toolType, function)
-3. **DETAILED** - Technical details (+ operatingSystem, language, documentation)
-4. **COMPLETE** - Comprehensive metadata (+ license, maturity, cost, downloads, publications)
-5. **COMPREHENSIVE** - Full richness (+ multiple contacts, relations, detailed credits)
+### Analysis Modes
+- **Single Tool Analysis**: Analyze specific tools by bio.tools ID
+- **Search & Analyze**: Search for tools and analyze multiple results
+- **Random Tool Analysis**: Discover and analyze random tools
+- **Collection Analysis**: Analyze tools from specific bio.tools collections
 
 ### Quality Metrics
+- **Overall Grade**: A-F scoring based on comprehensive analysis
+- **Standards Tier**: Compliance with Tool Information Standards (Tier 1-5)
+- **Schema Validation**: Structural validation against biotoolsSchema
+- **Lint Analysis**: Issues and recommendations for improvement
+- **Completeness Score**: Percentage of required/recommended fields filled
+- **Content Quality**: URL health, EDAM term consistency, documentation quality
 
-Each tool receives:
+### Interactive Visualizations
+- **Radar Charts**: Multi-dimensional quality visualization
+- **Progress Bars**: Quick quality metric overview
+- **Data Tables**: Detailed results with filtering and sorting
+- **Download Options**: Export results as JSON or CSV
 
-- **Overall Score** (0-100) - Weighted combination of all quality factors
-- **Quality Grade** (A-F) - Letter grade based on overall score
-- **Standards Tier** - Achieved tier in the Tool Information Standards
-- **Field Completeness** - Percentage of recommended fields present
-- **Content Quality Scores** - URL health, EDAM consistency, publication quality
+## 🔧 Technical Architecture
 
-### Validation Checks
-
-- **Schema Validation** - Compliance with biotoolsSchema
-- **EDAM Term Validation** - Correct format and consistency of EDAM ontology terms
-- **URL Validation** - Format checking and accessibility hints
-- **Publication Validation** - DOI, PMID, PMCID format validation
-- **Completeness Analysis** - Missing required and recommended fields
-- **Consistency Checks** - Internal metadata consistency
-
-## Output Formats
-
-### JSON Export
-Detailed analysis data with complete metrics and recommendations:
-```json
-{
-  "tool_id": "signalp",
-  "tool_name": "SignalP",
-  "metrics": {
-    "overall_score": 85.4,
-    "quality_grade": "B",
-    "standards_tier": "COMPLETE"
-  },
-  "recommendations": [...]
-}
+### Core Components
+```
+app.py                    # Main Streamlit application
+src/
+├── collectors/
+│   └── biotools_api.py  # Bio.tools API client
+├── analyzers/
+│   ├── quality_analyzer.py  # Quality scoring orchestration
+│   └── linter.py        # Linting integration
+├── validators/
+│   ├── schema_validator.py    # Schema validation
+│   ├── standards_scorer.py    # Standards compliance
+│   └── completeness_scorer.py # Completeness metrics
+└── utils/
+    ├── logger.py        # Logging configuration
+    └── data_cleaner.py  # Data preprocessing
 ```
 
-### CSV Export
-Tabular data suitable for statistical analysis and plotting.
+### Data Flow
+1. **API Request**: Fetch tool data from bio.tools API
+2. **Preprocessing**: Clean and normalize data
+3. **Validation**: Schema validation against biotoolsSchema
+4. **Scoring**: Calculate quality metrics and grades
+5. **Linting**: Analyze with biotools-linter for issues
+6. **Visualization**: Generate interactive charts and reports
 
-### Excel Export
-Multi-sheet workbook with:
-- Quality metrics summary
-- Detailed analysis results
-- Summary statistics
-- Top issues across tools
+## 📊 Quality Scoring System
 
-### HTML Dashboard
-Interactive visualizations including:
-- Quality distribution charts
-- Standards tier analysis
-- Issue categorization
-- Comparative metrics
+### Grading Scale
+- **A (90-100%)**: Excellent - Comprehensive, high-quality annotation
+- **B (80-89%)**: Good - Well-annotated with minor gaps
+- **C (70-79%)**: Satisfactory - Adequate annotation, some improvements needed
+- **D (60-69%)**: Needs Improvement - Basic annotation, missing key information
+- **F (<60%)**: Poor - Significant gaps in annotation
 
-## Architecture
+### Standards Tiers (ELIXIR Tool Information Standards)
+- **Tier 1**: Minimal viable annotation
+- **Tier 2**: Basic descriptive information
+- **Tier 3**: Comprehensive metadata
+- **Tier 4**: Enhanced discoverability
+- **Tier 5**: Exemplary annotation with all optional fields
 
-```
-bio.tools-annotation-quality-evaluation/
-├── src/
-│   ├── collectors/          # Data collection from bio.tools API
-│   ├── validators/          # Schema validation and standards scoring
-│   ├── analyzers/           # Quality analysis and linting
-│   └── reporters/           # Visualization and reporting
-├── data/
-│   ├── raw/                 # Raw data from API
-│   ├── processed/           # Processed analysis results
-│   ├── reports/             # Generated reports and charts
-│   └── cache/               # API response cache
-├── tests/                   # Unit and integration tests
-├── notebooks/               # Jupyter notebooks for analysis
-└── main.py                  # CLI application
-```
+## 🧪 Testing
 
-### Core Modules
-
-- **BioToolsAPIClient** - Handles API interactions with rate limiting and caching
-- **ToolInformationStandardsScorer** - Implements the 5-tier quality framework
-- **BiotoolsSchemaValidator** - Validates against official schema
-- **BiotoolsLinter** - Comprehensive quality checks and issue detection
-- **QualityAnalyzer** - Combines all analysis methods
-- **QualityReporter** - Generates reports and visualizations
-
-## Examples
-
-### Example 1: Analyze ELIXIR Tools Collection
-
+Run API connectivity tests:
 ```bash
-python main.py analyze --collection "ELIXIR Tools" --format excel --generate-charts
+python test_api.py
 ```
 
-This will:
-- Fetch all tools in the ELIXIR Tools collection
-- Perform comprehensive quality analysis
-- Generate an Excel report with multiple sheets
-- Create visualization charts
-
-### Example 2: Compare Sequence Analysis Tools
-
+Run unit tests:
 ```bash
-python main.py compare --query "sequence analysis" --max-tools 30
+pytest tests/
 ```
 
-This will:
-- Search for sequence analysis tools
-- Analyze up to 30 tools
-- Generate comparative visualizations
-- Create an interactive dashboard
+## 📁 Project Structure
 
-### Example 3: Detailed Validation
+### Essential Files
+- `app.py` - Main Streamlit application
+- `run_app.py` - Application launcher
+- `test_api.py` - API connectivity testing
+- `requirements.txt` - Python dependencies
 
+### Data Directories
+- `data/cache/` - Cached API responses for faster repeated access
+- `logs/` - Application logs
+- `docs/` - Technical documentation
+
+### External Components
+- `biotools-linter/` - Integrated linter for metadata validation
+- `EDAM.csv`, `EDAM.owl` - EDAM ontology files for term validation
+
+## 🔗 External Dependencies
+
+- **bio.tools API**: Live registry data from https://bio.tools/api/
+- **biotoolsSchema**: JSON schema validation
+- **biotools-linter**: Metadata quality checking
+- **EDAM Ontology**: Bioinformatics ontology for term validation
+
+## 🛠️ Development
+
+### Environment Setup
 ```bash
-python main.py validate --tool-id blast --show-details
-```
-
-Output:
-```
-==================================================
-QUALITY REPORT FOR BLAST
-==================================================
-Overall Quality: Grade B (82.5/100)
-Standards Tier: COMPLETE (78.0/100)
-Schema Valid: ✅ Yes
-⚠️  Warning Issues: 3
-ℹ️  Info Issues: 5
-Field Completeness: 85.0%
-Required Fields: ✅
-Content Features: Functions, Documentation, Publications
-
-🔧 PRIORITY FIXES:
-  • Add contact information with email
-  • Update operating system compatibility
-
-💡 RECOMMENDATIONS:
-  • Add more detailed function descriptions
-  • Include software license information
-  • Add download links for different versions
-```
-
-## API Integration
-
-The tool integrates with the bio.tools API to fetch tool metadata. All API interactions include:
-
-- **Rate Limiting** - Respects API limits with configurable delays
-- **Caching** - Local caching to avoid repeated requests
-- **Error Handling** - Robust error handling and retry logic
-- **Authentication Support** - Ready for authenticated requests when needed
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Setup
-
-```bash
-# Install development dependencies
-pip install -r requirements.txt
-
-# Run tests
-python -m pytest tests/
-
-# Run linting
-flake8 src/
-black src/
-
-# Generate coverage report
-pytest --cov=src tests/
-```
-
-## Related Projects
-
-- [bio.tools](https://bio.tools/) - The ELIXIR Tools and Data Services Registry
-- [biotoolsSchema](https://github.com/bio-tools/biotoolsSchema) - Official schema for bio.tools
-- [biotools-linter](https://github.com/3top1a/biotools-linter) - Rule-based linter for bio.tools
-- [Tool Information Standards](https://bio-tools.github.io/Tool-Information-Standards/) - Quality guidelines
-
-## Citation
-
-If you use this tool in your research, please cite:
-
-```bibtex
-@software{biotools_quality_eval,
-  title={Bio.tools Annotation Quality Evaluation},
-  author={Bio.tools Quality Evaluation Team},
-  year={2024},
-  url={https://github.com/your-username/bio.tools-annotation-quality-evaluation}
-}
-```
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/your-username/bio.tools-annotation-quality-evaluation/issues)
-- **Documentation**: [Project Wiki](https://github.com/your-username/bio.tools-annotation-quality-evaluation/wiki)
-- **Email**: your-email@domain.com
-
-## Acknowledgments
-
-- [ELIXIR](https://elixir-europe.org/) for the bio.tools registry
-- [Bio.tools team](https://bio.tools/) for the API and schema
-- Contributors to the Tool Information Standards
-- Open source community for the foundational libraries
-
-## Prerequisites
-
-- Python 3.8+ and basic familiarity with virtual environments
-- Experience with JSON handling and data visualization (matplotlib, seaborn, plotly, etc.)
-
-## Getting started (suggested)
-
-1. Create a virtual environment and activate it:
-
-```powershell
 python -m venv .venv
+# Windows
 .\.venv\Scripts\Activate.ps1
-```
+# Linux/Mac
+source .venv/bin/activate
 
-2. Install dependencies (if a requirements file is added):
-
-```powershell
 pip install -r requirements.txt
 ```
 
-3. Run the main pipeline (TBD — implement script entrypoints):
+### Key Technologies
+- **Streamlit**: Web application framework
+- **Plotly**: Interactive visualizations
+- **Pandas**: Data manipulation
+- **Requests**: HTTP API client
+- **JSONSchema**: Data validation
 
-```powershell
-python -m src.main --help
-```
+## 📝 License
 
-Note: This repository currently contains planning and scope material. Implementation files (scripts, modules, requirements) should be added to follow the project structure.
+This project is licensed under the terms specified in the LICENSE file.
 
-## Contribution & project structure
+## 🤝 Contributing
 
-Recommended structure when implementing:
+Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
 
-- src/ — Python package for pipeline code
-- data/ — raw and processed JSON/CSV outputs
-- notebooks/ — exploratory analysis and figures
-- tests/ — unit and integration tests
-- docs/ — additional documentation and the proposed revision drafts
+## 📞 Support
 
-If you'd like help scaffolding the codebase (project layout, starter scripts, tests, and a minimal working pipeline), open an issue or request a scaffold in this repository and I'll create it.
-
-## Resources
-
-- Tool Information Standards: https://bio-tools.github.io/Tool-Information-Standards/use_cases.html
-- biotoolsSchema: https://github.com/bio-tools/biotoolsschema
-- bio.tools linter: https://github.com/3top1a/biotools-linter/tree/main
-
-## License
-
-See the `LICENSE` file for licensing details.
-
----
-
-Maintainers: bneiG1
+For questions or support, please refer to the documentation in the `docs/` directory or open an issue on the project repository.
