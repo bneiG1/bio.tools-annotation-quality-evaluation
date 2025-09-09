@@ -227,6 +227,7 @@ class BioToolsAPIClient:
         self,
         batch_size: int = 25,
         max_tools: Optional[int] = None,
+        start_page: int = 1,
         **filters
     ) -> Iterator[Dict]:
         """
@@ -235,13 +236,16 @@ class BioToolsAPIClient:
         Args:
             batch_size: Number of tools per page
             max_tools: Maximum number of tools to fetch (None for all)
+            start_page: Page number to start from (useful for resuming)
             **filters: Filter parameters
             
         Yields:
             Individual tool dictionaries
         """
-        page = 1
+        page = start_page
         total_fetched = 0
+        
+        logger.info(f"Starting to fetch tools from page {start_page}")
         
         while True:
             try:
@@ -254,6 +258,7 @@ class BioToolsAPIClient:
                 
                 for tool in tools:
                     if max_tools and total_fetched >= max_tools:
+                        logger.info(f"Reached maximum tools limit: {max_tools}")
                         return
                     
                     yield tool
@@ -265,11 +270,78 @@ class BioToolsAPIClient:
                     break
                 
                 page += 1
-                logger.info(f"Fetched {total_fetched} tools, moving to page {page}")
+                
+                # Log progress every 10 pages
+                if page % 10 == 0:
+                    logger.info(f"Fetched {total_fetched} tools, moving to page {page}")
                 
             except Exception as e:
                 logger.error(f"Error fetching page {page}: {e}")
                 break
+    
+    def count_cached_tools(self) -> int:
+        """
+        Count the number of tools already cached.
+        
+        Returns:
+            Number of cached tool files
+        """
+        if not self.cache_dir or not self.cache_dir.exists():
+            return 0
+        
+        cached_files = list(self.cache_dir.glob("tool__*.json"))
+        return len(cached_files)
+    
+    def clear_cache(self) -> int:
+        """
+        Clear all cached tool data.
+        
+        Returns:
+            Number of files deleted
+        """
+        if not self.cache_dir or not self.cache_dir.exists():
+            return 0
+        
+        cached_files = list(self.cache_dir.glob("tool__*.json"))
+        deleted_count = 0
+        
+        for cache_file in cached_files:
+            try:
+                cache_file.unlink()
+                deleted_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete cache file {cache_file}: {e}")
+        
+        logger.info(f"Cleared {deleted_count} cached tool files")
+        return deleted_count
+    
+    def get_cache_info(self) -> Dict:
+        """
+        Get information about the current cache.
+        
+        Returns:
+            Dictionary with cache statistics
+        """
+        if not self.cache_dir or not self.cache_dir.exists():
+            return {
+                'exists': False,
+                'file_count': 0,
+                'total_size_mb': 0,
+                'path': str(self.cache_dir) if self.cache_dir else None
+            }
+        
+        cached_files = list(self.cache_dir.glob("*.json"))
+        # Count tool files - both patterns used by the caching system
+        tool_files = [f for f in cached_files if f.name.startswith("tool_")]
+        total_size = sum(f.stat().st_size for f in cached_files)
+        
+        return {
+            'exists': True,
+            'file_count': len(cached_files),
+            'tool_files': len(tool_files),
+            'total_size_mb': total_size / (1024 * 1024),
+            'path': str(self.cache_dir)
+        }
     
     def get_stats(self) -> Dict:
         """

@@ -96,6 +96,68 @@ python main.py stats
 - `--generate-charts` - Generate visualization charts
 - `--create-dashboard` - Create interactive HTML dashboard
 - `--verbose, -v` - Enable verbose logging
+- `--config, -c` - Configuration file path
+
+## Logging and Configuration
+
+### Logging System
+
+The application includes a comprehensive logging system with support for:
+
+- **Multiple Log Levels**: DEBUG, INFO, WARNING, ERROR
+- **Console and File Logging**: Configurable output destinations
+- **Log Rotation**: Automatic file rotation with size limits
+- **Analysis-Specific Logs**: Dedicated log files for different analysis runs
+- **Configuration-Based Setup**: YAML-based logging configuration
+
+#### Basic Usage
+
+```bash
+# Enable verbose logging
+python main.py --verbose analyze --tool-id blast
+
+# Use custom configuration
+python main.py --config config/production.yaml analyze --collection proteomics
+```
+
+#### Log Files
+
+Logs are stored in the `logs/` directory:
+
+- `biotools_quality_analysis.log` - Main application log
+- `analysis_name_timestamp.log` - Analysis-specific logs
+- `errors.log` - Error-only logs (if configured)
+
+### Configuration Files
+
+Create YAML configuration files to customize:
+
+```yaml
+system:
+  logging:
+    level: "INFO"
+    file_logging: true
+    console_logging: true
+    log_file: "biotools_quality_analysis.log"
+    max_log_size: 10485760  # 10MB
+    backup_count: 5
+  
+  api:
+    timeout: 30
+    max_retries: 3
+    rate_limit_delay: 0.1
+  
+scoring:
+  weights:
+    basic_info: 15
+    core_metadata: 25
+    technical_info: 20
+    accessibility: 20
+    advanced_features: 15
+    community: 5
+```
+
+See `config/default_config.yaml` for a complete configuration example.
 
 ## Quality Assessment Framework
 

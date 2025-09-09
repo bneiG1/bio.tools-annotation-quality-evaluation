@@ -8,8 +8,9 @@ for evaluating tool metadata completeness and quality.
 from typing import Dict, List, Optional, Set, Tuple
 from enum import Enum
 import logging
+from ..utils.logger import Logger
 
-logger = logging.getLogger(__name__)
+logger = Logger.get_logger(__name__)
 
 
 class Tier(Enum):
@@ -26,10 +27,11 @@ class ToolInformationStandardsScorer:
     Scores bio.tools entries according to Tool Information Standards.
     
     Implements the 5-tier system (SPARSE to COMPREHENSIVE) based on
-    presence and quality of specific metadata attributes.
+    presence and quality of specific metadata attributes following
+    the exact requirements from the Tool Information Standards diagram.
     """
     
-    # Define tier requirements based on Tool Information Standards
+    # Define tier requirements based on Tool Information Standards diagram
     TIER_REQUIREMENTS = {
         Tier.SPARSE: {
             "required_fields": ["name", "description", "homepage", "biotoolsID"],
@@ -37,57 +39,36 @@ class ToolInformationStandardsScorer:
         },
         Tier.MINIMAL: {
             "required_fields": ["name", "description", "homepage", "biotoolsID", "topic", "toolType"],
-            "required_groups": ["function_basic"]
+            "required_groups": ["publication", "support"]
         },
         Tier.DETAILED: {
             "required_fields": [
                 "name", "description", "homepage", "biotoolsID", 
-                "topic", "toolType", "operatingSystem", "language"
+                "topic", "toolType", "operatingSystem", "language", "license"
             ],
-            "required_groups": ["function_detailed", "documentation"]
+            "required_groups": ["publication", "support", "function", "documentation", "input_output"]
         },
         Tier.COMPLETE: {
             "required_fields": [
                 "name", "description", "homepage", "biotoolsID",
-                "topic", "toolType", "operatingSystem", "language",
-                "license", "maturity", "cost"
+                "topic", "toolType", "operatingSystem", "language", "license"
             ],
             "required_groups": [
-                "function_complete", "documentation", "download", 
-                "link", "publication", "contact"
+                "publication", "support", "function", "documentation", "input_output",
+                "accessibility", "code_availability", "downloads", "data_formats"
             ]
         },
         Tier.COMPREHENSIVE: {
             "required_fields": [
                 "name", "description", "homepage", "biotoolsID",
-                "topic", "toolType", "operatingSystem", "language",
-                "license", "maturity", "cost", "accessibility"
+                "topic", "toolType", "operatingSystem", "language", "license"
             ],
             "required_groups": [
-                "function_comprehensive", "documentation_comprehensive",
-                "download", "link", "publication", "contact_comprehensive",
-                "relation", "credit"
+                "publication", "support", "function", "documentation", "input_output",
+                "accessibility", "code_availability", "downloads", "data_formats",
+                "scientific_benchmark", "technical_monitoring"
             ]
         }
-    }
-    
-    # Define field groups that satisfy certain requirements
-    FIELD_GROUPS = {
-        "function_basic": ["function"],
-        "function_detailed": ["function"],  # With operations and basic input/output
-        "function_complete": ["function"],  # With detailed input/output and formats
-        "function_comprehensive": ["function"],  # Complete function descriptions
-        
-        "documentation": ["documentation"],
-        "documentation_comprehensive": ["documentation"],  # Multiple doc types
-        
-        "download": ["download"],
-        "link": ["link"],
-        "publication": ["publication"],
-        "contact": ["credit"],
-        "contact_comprehensive": ["credit"],  # Multiple contacts with ORCID
-        "relation": ["relation"],
-        "credit": ["credit"]
     }
     
     def __init__(self):
@@ -113,13 +94,13 @@ class ToolInformationStandardsScorer:
         field_analysis = self._analyze_fields(tool_data)
         
         # Determine achieved tier
-        achieved_tier = self._determine_tier(field_analysis)
+        achieved_tier = self._determine_tier(field_analysis, tool_data)
         
         # Calculate numerical score
         score = self._calculate_score(field_analysis, achieved_tier)
         
         # Generate recommendations
-        recommendations = self._generate_recommendations(field_analysis, achieved_tier)
+        recommendations = self._generate_recommendations(field_analysis, achieved_tier, tool_data)
         
         return {
             "tier": achieved_tier,
@@ -152,21 +133,27 @@ class ToolInformationStandardsScorer:
         basic_fields = [
             "name", "description", "homepage", "biotoolsID",
             "topic", "toolType", "operatingSystem", "language",
-            "license", "maturity", "cost", "accessibility"
+            "license"
         ]
         
         for field in basic_fields:
-            if self._is_field_present(tool_data, field):
+            is_present = self._is_field_present(tool_data, field)
+            if is_present:
                 analysis["present_fields"].add(field)
                 analysis["field_quality"][field] = self._assess_field_quality(tool_data, field)
             else:
                 analysis["missing_fields"].add(field)
+                analysis["field_quality"][field] = {"present": False, "completeness": 0.0, "issues": [f"Missing {field}"]}
         
-        # Check complex fields and groups
-        for group_name, group_fields in self.FIELD_GROUPS.items():
-            analysis["group_satisfaction"][group_name] = self._check_group_satisfaction(
-                tool_data, group_name, group_fields
-            )
+        # Check complex field groups
+        groups = [
+            "publication", "support", "function", "documentation", "input_output",
+            "accessibility", "code_availability", "downloads", "data_formats",
+            "scientific_benchmark", "technical_monitoring"
+        ]
+        
+        for group_name in groups:
+            analysis["group_satisfaction"][group_name] = self._check_group_satisfaction(tool_data, group_name)
         
         return analysis
     
@@ -179,7 +166,7 @@ class ToolInformationStandardsScorer:
         
         # Handle different data types
         if isinstance(value, str):
-            return bool(value.strip())
+            return len(value.strip()) > 0
         elif isinstance(value, list):
             return len(value) > 0
         elif isinstance(value, dict):
@@ -202,80 +189,42 @@ class ToolInformationStandardsScorer:
         }
         
         if field == "description":
-            quality["completeness"] = min(1.0, len(value) / 100) if value else 0.0
-            if value and len(value) < 50:
-                quality["issues"].append("Description is quite short")
+            desc_len = len(value.strip()) if value else 0
+            if desc_len < 10:
+                quality["completeness"] = 0.0
+                quality["issues"].append("Description too short (minimum 10 characters)")
+            elif desc_len < 50:
+                quality["completeness"] = 0.5
+                quality["issues"].append("Description could be more detailed")
+            elif desc_len > 1000:
+                quality["completeness"] = 0.8
+                quality["issues"].append("Description exceeds recommended length")
+            else:
+                quality["completeness"] = 1.0
         
         elif field == "topic":
-            if isinstance(value, list) and value:
-                quality["completeness"] = min(1.0, len(value) / 3)  # Ideal: 3+ topics
-                # Check if topics have both term and URI
-                complete_topics = sum(1 for topic in value 
-                                    if isinstance(topic, dict) and 
-                                    topic.get("term") and topic.get("uri"))
-                if complete_topics < len(value):
-                    quality["issues"].append("Some topics missing term or URI")
+            if isinstance(value, list) and len(value) > 0:
+                quality["completeness"] = 1.0
+                if len(value) < 2:
+                    quality["issues"].append("Consider adding more specific topics")
             else:
                 quality["completeness"] = 0.0
+                quality["issues"].append("No topics specified")
         
-        elif field == "function":
-            if isinstance(value, list):
-                quality.update(self._assess_function_quality(value))
+        elif field == "homepage":
+            if value and (value.startswith("http://") or value.startswith("https://")):
+                quality["completeness"] = 1.0
             else:
-                quality["completeness"] = 0.0
-                quality["issues"] = ["Function field is not a list"]
-        
-        elif field in ["documentation", "download", "link", "publication", "credit"]:
-            if isinstance(value, list) and value:
-                quality["completeness"] = min(1.0, len(value) / 2)  # Ideal: 2+ items
-            else:
-                quality["completeness"] = 0.0
+                quality["completeness"] = 0.5
+                quality["issues"].append("Homepage should be a valid HTTP/HTTPS URL")
         
         else:
-            # Basic presence check for other fields
+            # Default quality assessment
             quality["completeness"] = 1.0 if value else 0.0
         
         return quality
     
-    def _assess_function_quality(self, functions: List[Dict]) -> Dict:
-        """Assess quality of function descriptions."""
-        if not functions:
-            return {"completeness": 0.0, "issues": ["No functions defined"]}
-        
-        total_score = 0
-        issues = []
-        
-        for func in functions:
-            func_score = 0
-            
-            # Check operation presence
-            operations = func.get("operation", [])
-            if operations:
-                func_score += 0.4
-                # Check if operations have URIs
-                ops_with_uri = sum(1 for op in operations if op.get("uri"))
-                if ops_with_uri < len(operations):
-                    issues.append("Some operations missing URI")
-            
-            # Check input/output presence
-            inputs = func.get("input", [])
-            outputs = func.get("output", [])
-            
-            if inputs:
-                func_score += 0.3
-            if outputs:
-                func_score += 0.3
-            
-            total_score += func_score
-        
-        avg_score = total_score / len(functions)
-        
-        return {
-            "completeness": avg_score,
-            "issues": issues
-        }
-    
-    def _check_group_satisfaction(self, tool_data: Dict, group_name: str, group_fields: List[str]) -> Dict:
+    def _check_group_satisfaction(self, tool_data: Dict, group_name: str) -> Dict:
         """Check if a field group requirement is satisfied."""
         satisfaction = {
             "satisfied": False,
@@ -283,200 +232,248 @@ class ToolInformationStandardsScorer:
             "details": {}
         }
         
-        if group_name.startswith("function"):
-            satisfaction.update(self._check_function_group(tool_data, group_name))
-        elif group_name.startswith("documentation"):
-            satisfaction.update(self._check_documentation_group(tool_data, group_name))
-        elif group_name.startswith("contact"):
-            satisfaction.update(self._check_contact_group(tool_data, group_name))
-        else:
-            # Basic group check - just need the field to be present
-            for field in group_fields:
-                if self._is_field_present(tool_data, field):
-                    satisfaction["satisfied"] = True
-                    satisfaction["completeness"] = 1.0
+        if group_name == "publication":
+            # Requirement 1: Valid identifier (DOI, PMID, PMCID) or "Unpublished"
+            publications = tool_data.get("publication", [])
+            valid_pubs = []
+            for pub in publications:
+                if pub.get("doi") or pub.get("pmid") or pub.get("pmcid"):
+                    valid_pubs.append(pub)
+            
+            satisfaction["satisfied"] = len(valid_pubs) > 0
+            satisfaction["completeness"] = 1.0 if len(valid_pubs) > 0 else 0.0
+            satisfaction["details"] = {
+                "total_publications": len(publications),
+                "valid_publications": len(valid_pubs)
+            }
+        
+        elif group_name == "support":
+            # Requirement 2: Primary contact with email/link or support links
+            credits = tool_data.get("credit", [])
+            links = tool_data.get("link", [])
+            
+            primary_contacts = []
+            for credit in credits:
+                if "Primary contact" in credit.get("typeRole", []):
+                    if credit.get("email") or credit.get("url"):
+                        primary_contacts.append(credit)
+            
+            support_links = []
+            support_types = ["Helpdesk", "Issue tracker", "Mailing list"]
+            for link in links:
+                if any(stype in link.get("type", []) for stype in support_types):
+                    support_links.append(link)
+            
+            satisfaction["satisfied"] = len(primary_contacts) > 0 or len(support_links) > 0
+            satisfaction["completeness"] = 1.0 if satisfaction["satisfied"] else 0.0
+            satisfaction["details"] = {
+                "primary_contacts": len(primary_contacts),
+                "support_links": len(support_links)
+            }
+        
+        elif group_name == "function":
+            # Scientific operations
+            functions = tool_data.get("function", [])
+            operations_count = sum(len(func.get("operation", [])) for func in functions)
+            
+            satisfaction["satisfied"] = operations_count > 0
+            satisfaction["completeness"] = 1.0 if operations_count > 0 else 0.0
+            satisfaction["details"] = {
+                "functions": len(functions),
+                "operations": operations_count
+            }
+        
+        elif group_name == "documentation":
+            # Requirement 3: Appropriate link
+            docs = tool_data.get("documentation", [])
+            satisfaction["satisfied"] = len(docs) > 0
+            satisfaction["completeness"] = 1.0 if len(docs) > 0 else 0.0
+            satisfaction["details"] = {"count": len(docs)}
+        
+        elif group_name == "input_output":
+            # Requirement 5: At least one input or output
+            functions = tool_data.get("function", [])
+            input_count = sum(len(func.get("input", [])) for func in functions)
+            output_count = sum(len(func.get("output", [])) for func in functions)
+            
+            satisfaction["satisfied"] = input_count > 0 or output_count > 0
+            satisfaction["completeness"] = 1.0 if satisfaction["satisfied"] else 0.0
+            satisfaction["details"] = {
+                "inputs": input_count,
+                "outputs": output_count
+            }
+        
+        elif group_name == "accessibility":
+            # Accessibility information
+            accessibility = tool_data.get("accessibility")
+            cost = tool_data.get("cost")
+            
+            # Check for terms of use in documentation
+            terms_of_use = False
+            docs = tool_data.get("documentation", [])
+            for doc in docs:
+                if "Terms of use" in doc.get("type", []):
+                    terms_of_use = True
                     break
+            
+            satisfaction["satisfied"] = bool(accessibility or cost or terms_of_use)
+            satisfaction["completeness"] = 1.0 if satisfaction["satisfied"] else 0.0
+            satisfaction["details"] = {
+                "accessibility": bool(accessibility),
+                "cost": bool(cost),
+                "terms_of_use": terms_of_use
+            }
+        
+        elif group_name == "code_availability":
+            # Requirement 3: Appropriate link
+            links = tool_data.get("link", [])
+            downloads = tool_data.get("download", [])
+            
+            repo_links = [l for l in links if "Repository" in l.get("type", [])]
+            source_downloads = [d for d in downloads if d.get("type") in ["Source code", "Software package"]]
+            
+            satisfaction["satisfied"] = len(repo_links) > 0 or len(source_downloads) > 0
+            satisfaction["completeness"] = 1.0 if satisfaction["satisfied"] else 0.0
+            satisfaction["details"] = {
+                "repository_links": len(repo_links),
+                "source_downloads": len(source_downloads)
+            }
+        
+        elif group_name == "downloads":
+            # Requirement 3: Appropriate link
+            downloads = tool_data.get("download", [])
+            satisfaction["satisfied"] = len(downloads) > 0
+            satisfaction["completeness"] = 1.0 if len(downloads) > 0 else 0.0
+            satisfaction["details"] = {"count": len(downloads)}
+        
+        elif group_name == "data_formats":
+            # Requirement 6: At least one format for each input/output
+            functions = tool_data.get("function", [])
+            total_inputs = 0
+            total_outputs = 0
+            inputs_with_formats = 0
+            outputs_with_formats = 0
+            
+            for func in functions:
+                for inp in func.get("input", []):
+                    total_inputs += 1
+                    if inp.get("format") and len(inp["format"]) > 0:
+                        inputs_with_formats += 1
+                
+                for out in func.get("output", []):
+                    total_outputs += 1
+                    if out.get("format") and len(out["format"]) > 0:
+                        outputs_with_formats += 1
+            
+            all_formats_specified = (total_inputs > 0 and inputs_with_formats == total_inputs and 
+                                   total_outputs > 0 and outputs_with_formats == total_outputs)
+            
+            satisfaction["satisfied"] = all_formats_specified
+            satisfaction["completeness"] = 1.0 if all_formats_specified else 0.0
+            satisfaction["details"] = {
+                "total_inputs": total_inputs,
+                "inputs_with_formats": inputs_with_formats,
+                "total_outputs": total_outputs,
+                "outputs_with_formats": outputs_with_formats
+            }
+        
+        elif group_name == "scientific_benchmark":
+            # Requirement 3: Appropriate link
+            publications = tool_data.get("publication", [])
+            benchmark_pubs = [p for p in publications if "Benchmarking study" in p.get("type", [])]
+            
+            links = tool_data.get("link", [])
+            benchmark_links = [l for l in links if "benchmark" in l.get("url", "").lower()]
+            
+            satisfaction["satisfied"] = len(benchmark_pubs) > 0 or len(benchmark_links) > 0
+            satisfaction["completeness"] = 1.0 if satisfaction["satisfied"] else 0.0
+            satisfaction["details"] = {
+                "benchmark_publications": len(benchmark_pubs),
+                "benchmark_links": len(benchmark_links)
+            }
+        
+        elif group_name == "technical_monitoring":
+            # Requirement 3: Appropriate link
+            links = tool_data.get("link", [])
+            monitoring_links = [l for l in links if "Technical monitoring" in l.get("type", [])]
+            
+            satisfaction["satisfied"] = len(monitoring_links) > 0
+            satisfaction["completeness"] = 1.0 if len(monitoring_links) > 0 else 0.0
+            satisfaction["details"] = {"monitoring_links": len(monitoring_links)}
         
         return satisfaction
     
-    def _check_function_group(self, tool_data: Dict, group_name: str) -> Dict:
-        """Check function group satisfaction based on tier requirements."""
-        functions = tool_data.get("function", [])
-        
-        if not functions:
-            return {"satisfied": False, "completeness": 0.0}
-        
-        if group_name == "function_basic":
-            # Just need at least one function with operation
-            for func in functions:
-                if func.get("operation"):
-                    return {"satisfied": True, "completeness": 1.0}
-        
-        elif group_name == "function_detailed":
-            # Need operations and some input/output
-            complete_functions = 0
-            for func in functions:
-                if (func.get("operation") and 
-                    (func.get("input") or func.get("output"))):
-                    complete_functions += 1
-            
-            if complete_functions > 0:
-                completeness = min(1.0, complete_functions / len(functions))
-                return {"satisfied": True, "completeness": completeness}
-        
-        # More detailed checks for higher tiers...
-        
-        return {"satisfied": False, "completeness": 0.0}
-    
-    def _check_documentation_group(self, tool_data: Dict, group_name: str) -> Dict:
-        """Check documentation group satisfaction."""
-        docs = tool_data.get("documentation", [])
-        
-        if not docs:
-            return {"satisfied": False, "completeness": 0.0}
-        
-        if group_name == "documentation":
-            return {"satisfied": True, "completeness": 1.0}
-        
-        elif group_name == "documentation_comprehensive":
-            # Need multiple types of documentation
-            doc_types = set()
-            for doc in docs:
-                doc_type = doc.get("type", [])
-                if isinstance(doc_type, list):
-                    doc_types.update(doc_type)
-                else:
-                    doc_types.add(doc_type)
-            
-            completeness = min(1.0, len(doc_types) / 3)  # Ideal: 3+ doc types
-            return {
-                "satisfied": len(doc_types) >= 2,
-                "completeness": completeness
-            }
-        
-        return {"satisfied": False, "completeness": 0.0}
-    
-    def _check_contact_group(self, tool_data: Dict, group_name: str) -> Dict:
-        """Check contact/credit group satisfaction."""
-        credits = tool_data.get("credit", [])
-        
-        if not credits:
-            return {"satisfied": False, "completeness": 0.0}
-        
-        if group_name == "contact":
-            return {"satisfied": True, "completeness": 1.0}
-        
-        elif group_name == "contact_comprehensive":
-            # Need contacts with ORCID or detailed info
-            detailed_contacts = sum(1 for credit in credits 
-                                  if credit.get("orcidid") or 
-                                  (credit.get("email") and credit.get("typeRole")))
-            
-            if detailed_contacts > 0:
-                completeness = min(1.0, detailed_contacts / len(credits))
-                return {"satisfied": True, "completeness": completeness}
-        
-        return {"satisfied": False, "completeness": 0.0}
-    
-    def _determine_tier(self, field_analysis: Dict) -> Tier:
-        """Determine the achieved tier based on field analysis."""
-        for tier in reversed(list(Tier)):  # Start from highest tier
-            requirements = self.TIER_REQUIREMENTS[tier]
-            
-            # Check required fields
-            required_fields = set(requirements["required_fields"])
-            present_fields = field_analysis["present_fields"]
-            
-            if not required_fields.issubset(present_fields):
-                continue
-            
-            # Check required groups
-            required_groups = requirements["required_groups"]
-            satisfied_groups = [
-                group for group, satisfaction in field_analysis["group_satisfaction"].items()
-                if satisfaction["satisfied"]
-            ]
-            
-            if all(group in satisfied_groups for group in required_groups):
+    def _determine_tier(self, field_analysis: Dict, tool_data: Dict) -> Tier:
+        """Determine the highest achieved tier."""
+        for tier in reversed(list(Tier)):
+            if self._tier_satisfied(tier, field_analysis, tool_data):
                 return tier
+        return Tier.SPARSE  # Fallback to lowest tier
+    
+    def _tier_satisfied(self, tier: Tier, field_analysis: Dict, tool_data: Dict) -> bool:
+        """Check if a specific tier is satisfied."""
+        requirements = self.TIER_REQUIREMENTS[tier]
         
-        # If no tier is satisfied, return the lowest
-        return Tier.SPARSE
+        # Check required fields
+        for field in requirements["required_fields"]:
+            if field not in field_analysis["present_fields"]:
+                return False
+        
+        # Check required groups
+        for group in requirements["required_groups"]:
+            if not field_analysis["group_satisfaction"][group]["satisfied"]:
+                return False
+        
+        return True
     
     def _calculate_score(self, field_analysis: Dict, achieved_tier: Tier) -> float:
-        """Calculate numerical score (0-100) based on analysis."""
-        # Base score from tier achievement
-        tier_scores = {
-            Tier.SPARSE: 20,
-            Tier.MINIMAL: 40,
-            Tier.DETAILED: 60,
-            Tier.COMPLETE: 80,
-            Tier.COMPREHENSIVE: 100
-        }
+        """Calculate numerical score based on completeness."""
+        # Base score from achieved tier (20 points per tier)
+        base_score = achieved_tier.value * 20
         
-        base_score = tier_scores[achieved_tier]
-        
-        # Add bonus points for field quality within the tier
+        # Add bonus points for field quality
         quality_bonus = 0
-        total_quality = sum(
-            quality.get("completeness", 0) 
-            for quality in field_analysis["field_quality"].values()
-        )
+        total_fields = len(field_analysis["field_quality"])
         
-        if field_analysis["field_quality"]:
-            avg_quality = total_quality / len(field_analysis["field_quality"])
-            quality_bonus = avg_quality * 10  # Max 10 bonus points
+        if total_fields > 0:
+            quality_sum = sum(fq["completeness"] for fq in field_analysis["field_quality"].values())
+            quality_bonus = (quality_sum / total_fields) * 20
         
-        final_score = min(100, base_score + quality_bonus)
-        return round(final_score, 1)
+        return min(100.0, round(base_score + quality_bonus, 1))
     
-    def _generate_recommendations(self, field_analysis: Dict, achieved_tier: Tier) -> List[str]:
-        """Generate recommendations for improving the tool entry."""
+    def _generate_recommendations(self, field_analysis: Dict, achieved_tier: Tier, tool_data: Dict) -> List[str]:
+        """Generate recommendations for improvement."""
         recommendations = []
         
-        # Recommend next tier requirements
-        next_tier_value = achieved_tier.value + 1
-        if next_tier_value <= 5:
-            next_tier = Tier(next_tier_value)
+        # Recommend next tier if not at maximum
+        if achieved_tier.value < 5:
+            next_tier = Tier(achieved_tier.value + 1)
             next_requirements = self.TIER_REQUIREMENTS[next_tier]
             
-            # Missing fields for next tier
-            missing_for_next = (
-                set(next_requirements["required_fields"]) - 
-                field_analysis["present_fields"]
-            )
+            recommendations.append(f"To achieve {next_tier.name} tier:")
             
-            if missing_for_next:
-                recommendations.append(
-                    f"To reach {next_tier.name} tier, add: {', '.join(sorted(missing_for_next))}"
-                )
+            # Check missing fields
+            for field in next_requirements["required_fields"]:
+                if field not in field_analysis["present_fields"]:
+                    recommendations.append(f"  • Add {field}")
             
-            # Missing groups for next tier
-            missing_groups = [
-                group for group in next_requirements["required_groups"]
-                if not field_analysis["group_satisfaction"].get(group, {}).get("satisfied", False)
-            ]
-            
-            if missing_groups:
-                recommendations.append(
-                    f"To reach {next_tier.name} tier, improve: {', '.join(missing_groups)}"
-                )
+            # Check missing groups
+            for group in next_requirements["required_groups"]:
+                if not field_analysis["group_satisfaction"][group]["satisfied"]:
+                    recommendations.append(f"  • Satisfy {group} requirements")
         
-        # Field quality recommendations
+        # Add specific quality improvements
         for field, quality in field_analysis["field_quality"].items():
-            if quality["completeness"] < 0.8 and quality["issues"]:
-                recommendations.extend([
-                    f"{field}: {issue}" for issue in quality["issues"]
-                ])
+            if quality["issues"]:
+                recommendations.append(f"Improve {field}: {quality['issues'][0]}")
         
         return recommendations
     
     def _generate_summary(self, tier: Tier, score: float, field_analysis: Dict) -> str:
-        """Generate a human-readable summary of the scoring."""
-        total_fields = len(field_analysis["present_fields"]) + len(field_analysis["missing_fields"])
-        present_count = len(field_analysis["present_fields"])
+        """Generate human-readable summary."""
+        missing_count = len(field_analysis["missing_fields"])
         
-        return (
-            f"Tool achieves {tier.name} tier (score: {score}/100). "
-            f"Has {present_count}/{total_fields} key fields present."
-        )
+        if missing_count == 0:
+            return f"Achieved {tier.name} tier with {score:.1f}% completeness - excellent!"
+        else:
+            return f"Achieved {tier.name} tier with {score:.1f}% completeness ({missing_count} fields missing)"

@@ -13,8 +13,9 @@ from urllib.request import urlopen
 
 import jsonschema
 from jsonschema import Draft4Validator, validators
+from ..utils.logger import Logger
 
-logger = logging.getLogger(__name__)
+logger = Logger.get_logger(__name__)
 
 
 class BiotoolsSchemaValidator:

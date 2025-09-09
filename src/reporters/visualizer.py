@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
 import json
+import re
 from datetime import datetime
 
 import numpy as np
@@ -152,7 +153,7 @@ class QualityReporter:
                 "Content Quality Metrics"
             ),
             specs=[
-                [{"type": "xy"}, {"type": "xy"}],
+                [{"type": "domain"}, {"type": "xy"}],
                 [{"type": "xy"}, {"type": "xy"}],
                 [{"type": "xy"}, {"type": "xy"}]
             ]
@@ -348,6 +349,573 @@ class QualityReporter:
         
         logger.info(f"Data exported to: {output_path}")
         return str(output_path)
+    
+    def export_per_tool_json(
+        self, 
+        reports: List[QualityReport], 
+        output_dir: Optional[str] = None
+    ) -> List[str]:
+        """
+        Export individual JSON files for each tool.
+        
+        Args:
+            reports: List of quality reports
+            output_dir: Custom output directory (optional, uses self.output_dir if not provided)
+            
+        Returns:
+            List of paths to exported files
+        """
+        if not reports:
+            raise ValueError("No reports provided for export")
+        
+        # Use custom output directory or default
+        export_dir = Path(output_dir) if output_dir else self.output_dir
+        
+        # Create per-tool subdirectory
+        per_tool_dir = export_dir / "per_tool_analysis"
+        per_tool_dir.mkdir(parents=True, exist_ok=True)
+        
+        exported_files = []
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        logger.info(f"Exporting {len(reports)} individual tool reports...")
+        
+        for report in reports:
+            try:
+                # Create safe filename from tool ID
+                safe_tool_id = self._sanitize_filename(report.tool_id)
+                filename = f"{safe_tool_id}_{timestamp}.json"
+                output_path = per_tool_dir / filename
+                
+                # Export individual report
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    json.dump(report.to_dict(), f, indent=2, ensure_ascii=False)
+                
+                exported_files.append(str(output_path))
+                logger.debug(f"Exported: {report.tool_id} -> {filename}")
+                
+            except Exception as e:
+                logger.error(f"Failed to export report for tool {report.tool_id}: {e}")
+                continue
+        
+        logger.info(f"Successfully exported {len(exported_files)} individual tool reports to: {per_tool_dir}")
+        return exported_files
+    
+    def _sanitize_filename(self, tool_id: str) -> str:
+        """
+        Create a safe filename from a tool ID.
+        
+        Args:
+            tool_id: Bio.tools ID
+            
+        Returns:
+            Sanitized filename
+        """
+        import re
+        # Replace invalid filename characters with underscores
+        safe_name = re.sub(r'[<>:"/\\|?*]', '_', tool_id)
+        # Remove leading/trailing dots and spaces
+        safe_name = safe_name.strip('. ')
+        # Limit length
+        if len(safe_name) > 200:
+            safe_name = safe_name[:200]
+        return safe_name or "unknown_tool"
+    
+    def export_per_tool_csv(
+        self, 
+        reports: List[QualityReport], 
+        output_dir: Optional[str] = None
+    ) -> List[str]:
+        """
+        Export individual CSV files for each tool.
+        
+        Args:
+            reports: List of quality reports
+            output_dir: Custom output directory (optional, uses self.output_dir if not provided)
+            
+        Returns:
+            List of paths to exported files
+        """
+        if not reports:
+            raise ValueError("No reports provided for export")
+        
+        # Use custom output directory or default
+        export_dir = Path(output_dir) if output_dir else self.output_dir
+        
+        # Create per-tool subdirectory
+        per_tool_dir = export_dir / "per_tool_analysis"
+        per_tool_dir.mkdir(parents=True, exist_ok=True)
+        
+        exported_files = []
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        logger.info(f"Exporting {len(reports)} individual tool CSV reports...")
+        
+        for report in reports:
+            try:
+                # Create safe filename from tool ID
+                safe_tool_id = self._sanitize_filename(report.tool_id)
+                filename = f"{safe_tool_id}_{timestamp}.csv"
+                output_path = per_tool_dir / filename
+                
+                # Convert single report to DataFrame
+                df = self._reports_to_dataframe([report])
+                df.to_csv(output_path, index=False)
+                
+                exported_files.append(str(output_path))
+                logger.debug(f"Exported: {report.tool_id} -> {filename}")
+                
+            except Exception as e:
+                logger.error(f"Failed to export CSV report for tool {report.tool_id}: {e}")
+                continue
+        
+        logger.info(f"Successfully exported {len(exported_files)} individual tool CSV reports to: {per_tool_dir}")
+        return exported_files
+    
+    def export_per_tool_excel(
+        self, 
+        reports: List[QualityReport], 
+        output_dir: Optional[str] = None
+    ) -> List[str]:
+        """
+        Export individual Excel files for each tool with multiple sheets.
+        
+        Args:
+            reports: List of quality reports
+            output_dir: Custom output directory (optional, uses self.output_dir if not provided)
+            
+        Returns:
+            List of paths to exported files
+        """
+        if not reports:
+            raise ValueError("No reports provided for export")
+        
+        # Use custom output directory or default
+        export_dir = Path(output_dir) if output_dir else self.output_dir
+        
+        # Create per-tool subdirectory
+        per_tool_dir = export_dir / "per_tool_analysis"
+        per_tool_dir.mkdir(parents=True, exist_ok=True)
+        
+        exported_files = []
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        logger.info(f"Exporting {len(reports)} individual tool Excel reports...")
+        
+        for report in reports:
+            try:
+                # Create safe filename from tool ID
+                safe_tool_id = self._sanitize_filename(report.tool_id)
+                filename = f"{safe_tool_id}_{timestamp}.xlsx"
+                output_path = per_tool_dir / filename
+                
+                with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+                    # Main metrics sheet
+                    df = self._reports_to_dataframe([report])
+                    df.to_excel(writer, sheet_name='Quality_Metrics', index=False)
+                    
+                    # Tool details sheet
+                    tool_details = self._create_tool_details_dataframe(report)
+                    tool_details.to_excel(writer, sheet_name='Tool_Details', index=False)
+                    
+                    # Lint issues sheet
+                    if report.lint_issues:
+                        lint_df = self._create_lint_issues_dataframe(report.lint_issues)
+                        lint_df.to_excel(writer, sheet_name='Lint_Issues', index=False)
+                    
+                    # Recommendations sheet
+                    rec_df = self._create_recommendations_dataframe(report)
+                    rec_df.to_excel(writer, sheet_name='Recommendations', index=False)
+                    
+                    # Standards analysis sheet
+                    standards_df = self._create_standards_dataframe(report)
+                    standards_df.to_excel(writer, sheet_name='Standards_Analysis', index=False)
+                
+                exported_files.append(str(output_path))
+                logger.debug(f"Exported: {report.tool_id} -> {filename}")
+                
+            except Exception as e:
+                logger.error(f"Failed to export Excel report for tool {report.tool_id}: {e}")
+                continue
+        
+        logger.info(f"Successfully exported {len(exported_files)} individual tool Excel reports to: {per_tool_dir}")
+        return exported_files
+    
+    def export_per_tool_html(
+        self, 
+        reports: List[QualityReport], 
+        output_dir: Optional[str] = None
+    ) -> List[str]:
+        """
+        Export individual HTML reports for each tool.
+        
+        Args:
+            reports: List of quality reports
+            output_dir: Custom output directory (optional, uses self.output_dir if not provided)
+            
+        Returns:
+            List of paths to exported files
+        """
+        if not reports:
+            raise ValueError("No reports provided for export")
+        
+        # Use custom output directory or default
+        export_dir = Path(output_dir) if output_dir else self.output_dir
+        
+        # Create per-tool subdirectory
+        per_tool_dir = export_dir / "per_tool_analysis"
+        per_tool_dir.mkdir(parents=True, exist_ok=True)
+        
+        exported_files = []
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        logger.info(f"Exporting {len(reports)} individual tool HTML reports...")
+        
+        for report in reports:
+            try:
+                # Create safe filename from tool ID
+                safe_tool_id = self._sanitize_filename(report.tool_id)
+                filename = f"{safe_tool_id}_{timestamp}.html"
+                output_path = per_tool_dir / filename
+                
+                # Generate HTML content
+                html_content = self._generate_tool_html_report(report)
+                
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    f.write(html_content)
+                
+                exported_files.append(str(output_path))
+                logger.debug(f"Exported: {report.tool_id} -> {filename}")
+                
+            except Exception as e:
+                logger.error(f"Failed to export HTML report for tool {report.tool_id}: {e}")
+                continue
+        
+        logger.info(f"Successfully exported {len(exported_files)} individual tool HTML reports to: {per_tool_dir}")
+        return exported_files
+    
+    def export_per_tool_all_formats(
+        self, 
+        reports: List[QualityReport], 
+        output_dir: Optional[str] = None,
+        formats: Optional[List[str]] = None
+    ) -> Dict[str, List[str]]:
+        """
+        Export individual files for each tool in multiple formats.
+        
+        Args:
+            reports: List of quality reports
+            output_dir: Custom output directory (optional, uses self.output_dir if not provided)
+            formats: List of formats to export (default: all supported formats)
+            
+        Returns:
+            Dictionary mapping format names to lists of exported file paths
+        """
+        if not reports:
+            raise ValueError("No reports provided for export")
+        
+        if formats is None:
+            formats = ['json', 'csv', 'excel', 'html']
+        
+        exported_files = {}
+        
+        logger.info(f"Exporting {len(reports)} individual tool reports in {len(formats)} formats...")
+        
+        if 'json' in formats:
+            exported_files['json'] = self.export_per_tool_json(reports, output_dir)
+        
+        if 'csv' in formats:
+            exported_files['csv'] = self.export_per_tool_csv(reports, output_dir)
+        
+        if 'excel' in formats:
+            exported_files['excel'] = self.export_per_tool_excel(reports, output_dir)
+        
+        if 'html' in formats:
+            exported_files['html'] = self.export_per_tool_html(reports, output_dir)
+        
+        total_files = sum(len(files) for files in exported_files.values())
+        logger.info(f"Successfully exported {total_files} individual tool files across {len(formats)} formats")
+        
+        return exported_files
+    
+    def _create_tool_details_dataframe(self, report: QualityReport) -> pd.DataFrame:
+        """Create a DataFrame with detailed tool information."""
+        details = {
+            'Field': [],
+            'Value': [],
+            'Notes': []
+        }
+        
+        # Basic tool information
+        details['Field'].extend(['Tool ID', 'Tool Name', 'Analysis Date', 'Last Update'])
+        details['Value'].extend([
+            report.tool_id,
+            report.tool_name,
+            report.metrics.analysis_date,
+            report.metrics.tool_last_update or 'N/A'
+        ])
+        details['Notes'].extend(['', '', '', ''])
+        
+        # Quality metrics
+        details['Field'].extend([
+            'Overall Score', 'Quality Grade', 'Standards Tier', 'Completeness Score',
+            'Schema Valid', 'Field Completeness', 'Has Functions', 'Has Documentation',
+            'Has Publications', 'Has Contacts'
+        ])
+        details['Value'].extend([
+            f"{report.metrics.overall_score}/100",
+            report.metrics.quality_grade,
+            report.metrics.standards_tier,
+            f"{report.metrics.completeness_score}/100",
+            'Yes' if report.metrics.schema_valid else 'No',
+            f"{report.metrics.field_completeness:.1%}",
+            'Yes' if report.metrics.has_functions else 'No',
+            'Yes' if report.metrics.has_documentation else 'No',
+            'Yes' if report.metrics.has_publications else 'No',
+            'Yes' if report.metrics.has_contacts else 'No'
+        ])
+        details['Notes'].extend([''] * 10)
+        
+        return pd.DataFrame(details)
+    
+    def _create_lint_issues_dataframe(self, lint_issues: List) -> pd.DataFrame:
+        """Create a DataFrame with lint issues."""
+        if not lint_issues:
+            return pd.DataFrame({'Message': ['No lint issues found']})
+        
+        issues_data = {
+            'Level': [],
+            'Code': [],
+            'Message': [],
+            'Suggestion': [],
+            'Location': []
+        }
+        
+        for issue in lint_issues:
+            issues_data['Level'].append(issue.level.value if hasattr(issue.level, 'value') else str(issue.level))
+            issues_data['Code'].append(issue.code)
+            issues_data['Message'].append(issue.message)
+            issues_data['Suggestion'].append(issue.suggestion or 'N/A')
+            issues_data['Location'].append(issue.location or 'N/A')
+        
+        return pd.DataFrame(issues_data)
+    
+    def _create_recommendations_dataframe(self, report: QualityReport) -> pd.DataFrame:
+        """Create a DataFrame with recommendations and priority fixes."""
+        rec_data = {
+            'Type': [],
+            'Recommendation': [],
+            'Priority': []
+        }
+        
+        # Add priority fixes
+        for fix in report.priority_fixes:
+            rec_data['Type'].append('Priority Fix')
+            rec_data['Recommendation'].append(fix)
+            rec_data['Priority'].append('High')
+        
+        # Add general recommendations
+        for rec in report.recommendations:
+            rec_data['Type'].append('Recommendation')
+            rec_data['Recommendation'].append(rec)
+            rec_data['Priority'].append('Medium')
+        
+        if not rec_data['Type']:
+            rec_data = {'Message': ['No specific recommendations available']}
+        
+        return pd.DataFrame(rec_data)
+    
+    def _create_standards_dataframe(self, report: QualityReport) -> pd.DataFrame:
+        """Create a DataFrame with standards analysis details."""
+        standards_data = {
+            'Field': [],
+            'Present': [],
+            'Completeness': [],
+            'Issues': []
+        }
+        
+        # Extract field analysis from standards analysis
+        field_analysis = report.standards_analysis.get('field_analysis', {}).get('field_quality', {})
+        
+        for field_name, field_info in field_analysis.items():
+            if isinstance(field_info, dict):
+                standards_data['Field'].append(field_name)
+                standards_data['Present'].append('Yes' if field_info.get('present', False) else 'No')
+                standards_data['Completeness'].append(f"{field_info.get('completeness', 0):.1%}")
+                issues = field_info.get('issues', [])
+                standards_data['Issues'].append('; '.join(issues) if issues else 'None')
+        
+        if not standards_data['Field']:
+            standards_data = {'Message': ['No field analysis data available']}
+        
+        return pd.DataFrame(standards_data)
+    
+    def _generate_tool_html_report(self, report: QualityReport) -> str:
+        """Generate an HTML report for a single tool using template."""
+        
+        # Load the HTML template
+        template_path = Path(__file__).parent / "templates" / "tool_report_template.html"
+        
+        try:
+            with open(template_path, 'r', encoding='utf-8') as f:
+                template_content = f.read()
+        except FileNotFoundError:
+            logger.error(f"HTML template not found at: {template_path}")
+            return self._generate_fallback_html_report(report)
+        
+        # Quality grade color mapping
+        grade_colors = {
+            'A': '#28a745',  # Green
+            'B': '#6f42c1',  # Purple  
+            'C': '#fd7e14',  # Orange
+            'D': '#dc3545',  # Red
+            'F': '#6c757d'   # Gray
+        }
+        
+        grade_color = grade_colors.get(report.metrics.quality_grade, '#6c757d')
+        
+        # Prepare template variables
+        template_vars = {
+            'tool_name': report.tool_name,
+            'tool_id': report.tool_id,
+            'grade_color': grade_color,
+            'quality_grade': report.metrics.quality_grade,
+            'overall_score': report.metrics.overall_score,
+            'standards_tier': report.metrics.standards_tier,
+            'completeness_score': f"{report.metrics.completeness_score:.1f}",
+            
+            # Field completeness
+            'field_completeness_percent': f"{report.metrics.field_completeness:.1%}",
+            'field_completeness_width': report.metrics.field_completeness * 100,
+            'recommended_fields_percent': f"{report.metrics.recommended_fields_complete:.1%}",
+            'recommended_fields_width': report.metrics.recommended_fields_complete * 100,
+            
+            # Content quality status
+            'functions_status': '✅ Present' if report.metrics.has_functions else '❌ Missing',
+            'functions_status_class': 'status-yes' if report.metrics.has_functions else 'status-no',
+            'documentation_status': '✅ Present' if report.metrics.has_documentation else '❌ Missing',
+            'documentation_status_class': 'status-yes' if report.metrics.has_documentation else 'status-no',
+            'publications_status': '✅ Present' if report.metrics.has_publications else '❌ Missing',
+            'publications_status_class': 'status-yes' if report.metrics.has_publications else 'status-no',
+            'contacts_status': '✅ Present' if report.metrics.has_contacts else '❌ Missing',
+            'contacts_status_class': 'status-yes' if report.metrics.has_contacts else 'status-no',
+            
+            # Quality scores
+            'publication_quality': f"{report.metrics.publication_quality:.1%}",
+            'url_health': f"{report.metrics.url_health:.1%}",
+            'edam_consistency': f"{report.metrics.edam_consistency:.1%}",
+            
+            # Schema validation
+            'schema_status': '✅ Valid' if report.metrics.schema_valid else '❌ Invalid',
+            'schema_status_class': 'status-yes' if report.metrics.schema_valid else 'status-no',
+            'schema_errors': report.metrics.schema_errors,
+            'schema_warnings': report.metrics.schema_warnings,
+            
+            # Lint issues
+            'lint_issues_count': report.metrics.lint_issues,
+            'lint_issues_content': self._generate_lint_issues_html(report.lint_issues),
+            
+            # Recommendations
+            'recommendations_content': self._generate_recommendations_html(report),
+            
+            # Summary and metadata
+            'summary': report.summary,
+            'analysis_date': report.metrics.analysis_date
+        }
+        
+        # Replace template variables
+        html_content = template_content.format(**template_vars)
+        
+        return html_content
+    
+    def _generate_lint_issues_html(self, lint_issues: List) -> str:
+        """Generate HTML content for lint issues."""
+        if not lint_issues:
+            return '''
+                    <li class="issue-item issue-info">
+                        <strong>No issues found!</strong> This tool has excellent quality.
+                    </li>'''
+        
+        html_parts = []
+        
+        # Show first 10 issues
+        for issue in lint_issues[:10]:
+            issue_level = issue.level.value.lower() if hasattr(issue.level, 'value') else str(issue.level).lower()
+            issue_class = f"issue-{issue_level}"
+            
+            suggestion_html = ""
+            if issue.suggestion:
+                suggestion_html = f'<br><em>Suggestion: {issue.suggestion}</em>'
+            
+            html_parts.append(f'''
+                    <li class="issue-item {issue_class}">
+                        <strong>{issue.code}:</strong> {issue.message}
+                        {suggestion_html}
+                    </li>''')
+        
+        # Add note about additional issues if there are more than 10
+        if len(lint_issues) > 10:
+            html_parts.append(f'''
+                    <li class="issue-item">
+                        <em>... and {len(lint_issues) - 10} more issues</em>
+                    </li>''')
+        
+        return ''.join(html_parts)
+    
+    def _generate_recommendations_html(self, report: QualityReport) -> str:
+        """Generate HTML content for recommendations."""
+        html_parts = []
+        
+        # Add priority fixes
+        if report.priority_fixes:
+            html_parts.append("<h3>Priority Fixes</h3><ul>")
+            for fix in report.priority_fixes:
+                html_parts.append(f"<li><strong>{fix}</strong></li>")
+            html_parts.append("</ul>")
+        
+        # Add general recommendations
+        if report.recommendations:
+            html_parts.append("<h3>Improvement Suggestions</h3><ul>")
+            for rec in report.recommendations:
+                html_parts.append(f"<li>{rec}</li>")
+            html_parts.append("</ul>")
+        
+        # Default message if no recommendations
+        if not report.priority_fixes and not report.recommendations:
+            html_parts.append("<p>No specific recommendations available. This tool has good quality overall.</p>")
+        
+        return ''.join(html_parts)
+    
+    def _generate_fallback_html_report(self, report: QualityReport) -> str:
+        """Generate a simple fallback HTML report if template is not available."""
+        return f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quality Report: {report.tool_name}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 20px; }}
+        .header {{ background: #007bff; color: white; padding: 20px; text-align: center; }}
+        .content {{ padding: 20px; }}
+        .metric {{ margin: 10px 0; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{report.tool_name}</h1>
+        <p>Quality Analysis Report • {report.tool_id}</p>
+    </div>
+    <div class="content">
+        <div class="metric"><strong>Overall Score:</strong> {report.metrics.overall_score}/100</div>
+        <div class="metric"><strong>Quality Grade:</strong> {report.metrics.quality_grade}</div>
+        <div class="metric"><strong>Standards Tier:</strong> {report.metrics.standards_tier}</div>
+        <div class="metric"><strong>Summary:</strong> {report.summary}</div>
+        <p><em>Report generated on {report.metrics.analysis_date}</em></p>
+    </div>
+</body>
+</html>"""
     
     def _calculate_summary_stats(self, reports: List[QualityReport]) -> Dict[str, Any]:
         """Calculate summary statistics from reports."""

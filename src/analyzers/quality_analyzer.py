@@ -12,7 +12,9 @@ from datetime import datetime
 
 from ..validators.schema_validator import ExtendedSchemaValidator
 from ..validators.standards_scorer import ToolInformationStandardsScorer, Tier
+from ..validators.completeness_scorer import ToolCompletenessScorer, CompletnessTier
 from ..analyzers.linter import BiotoolsLinter, LintIssue, IssueLevel
+from ..utils.data_cleaner import ToolDataCleaner
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +27,13 @@ class QualityMetrics:
     overall_score: float  # 0-100
     quality_grade: str   # A, B, C, D, F
     
-    # Standards compliance
+    # Standards compliance (legacy scorer)
     standards_tier: str
     standards_score: float
+    
+    # Completeness scoring (new Tool Information Standards)
+    completeness_tier: str
+    completeness_score: float
     
     # Schema validation
     schema_valid: bool
@@ -72,6 +78,7 @@ class QualityReport:
     
     # Detailed results
     standards_analysis: Dict
+    completeness_analysis: Dict  # New completeness analysis
     schema_results: Dict
     lint_issues: List[LintIssue]
     
@@ -84,16 +91,34 @@ class QualityReport:
     
     def to_dict(self) -> Dict:
         """Convert report to dictionary for serialization."""
+        def convert_to_serializable(obj):
+            """Convert objects to JSON-serializable format."""
+            if isinstance(obj, set):
+                return list(obj)
+            elif hasattr(obj, 'name'):  # Enum objects
+                return obj.name
+            elif hasattr(obj, 'value'):  # Enum objects
+                return obj.value  
+            elif isinstance(obj, dict):
+                return {k: convert_to_serializable(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_to_serializable(item) for item in obj]
+            return obj
+        
+        # Convert standards analysis with enum handling
+        standards_dict = convert_to_serializable(dict(self.standards_analysis))
+            
         return {
             "tool_id": self.tool_id,
             "tool_name": self.tool_name,
-            "metrics": asdict(self.metrics),
-            "standards_analysis": self.standards_analysis,
-            "schema_results": self.schema_results,
-            "lint_issues": [asdict(issue) for issue in self.lint_issues],
-            "recommendations": self.recommendations,
-            "priority_fixes": self.priority_fixes,
-            "summary": self.summary
+            "metrics": convert_to_serializable(asdict(self.metrics)),
+            "standards_analysis": standards_dict,
+            "completeness_analysis": convert_to_serializable(self.completeness_analysis),
+            "schema_results": convert_to_serializable(self.schema_results),
+            "lint_issues": [convert_to_serializable(asdict(issue)) for issue in self.lint_issues],
+            "recommendations": convert_to_serializable(self.recommendations),
+            "priority_fixes": convert_to_serializable(self.priority_fixes),
+            "summary": convert_to_serializable(self.summary)
         }
 
 
@@ -108,7 +133,9 @@ class QualityAnalyzer:
     def __init__(
         self,
         schema_path: Optional[str] = None,
-        enable_extended_validation: bool = True
+        enable_extended_validation: bool = True,
+        clean_data: bool = True,
+        aggressive_cleaning: bool = False
     ):
         """
         Initialize the quality analyzer.
@@ -116,11 +143,24 @@ class QualityAnalyzer:
         Args:
             schema_path: Path to biotoolsSchema file
             enable_extended_validation: Enable extended validation checks
+            clean_data: Clean tool data before analysis (removes empty values)
+            aggressive_cleaning: Use aggressive cleaning settings
         """
         self.schema_validator = ExtendedSchemaValidator(schema_path)
         self.standards_scorer = ToolInformationStandardsScorer()
+        self.completeness_scorer = ToolCompletenessScorer()  # New completeness scorer
         self.linter = BiotoolsLinter()
         self.enable_extended_validation = enable_extended_validation
+        self.clean_data = clean_data
+        
+        # Initialize data cleaner if enabled
+        if self.clean_data:
+            if aggressive_cleaning:
+                self.data_cleaner = ToolDataCleaner.create_aggressive_cleaner()
+            else:
+                self.data_cleaner = ToolDataCleaner.create_biotools_standard_cleaner()
+        else:
+            self.data_cleaner = None
     
     def analyze_tool(self, tool_data: Dict) -> QualityReport:
         """
@@ -137,14 +177,22 @@ class QualityAnalyzer:
         
         logger.info(f"Analyzing tool: {tool_id}")
         
-        # Perform all analyses
-        standards_analysis = self.standards_scorer.score_tool(tool_data)
-        schema_results = self.schema_validator.validate_tool(tool_data)
-        lint_issues = self.linter.lint_tool(tool_data)
+        # Clean the data first if enabled
+        if self.clean_data and self.data_cleaner:
+            logger.debug(f"Cleaning tool data for: {tool_id}")
+            cleaned_tool_data = self.data_cleaner.clean_tool(tool_data)
+        else:
+            cleaned_tool_data = tool_data
+        
+        # Perform all analyses on cleaned data
+        standards_analysis = self.standards_scorer.score_tool(cleaned_tool_data)
+        completeness_analysis = self.completeness_scorer.score_tool(cleaned_tool_data)  # New completeness analysis
+        schema_results = self.schema_validator.validate_tool(cleaned_tool_data)
+        lint_issues = self.linter.lint_tool(cleaned_tool_data)
         
         # Calculate comprehensive metrics
         metrics = self._calculate_metrics(
-            tool_data, standards_analysis, schema_results, lint_issues
+            cleaned_tool_data, standards_analysis, completeness_analysis, schema_results, lint_issues
         )
         
         # Generate recommendations
@@ -160,6 +208,7 @@ class QualityAnalyzer:
             tool_name=tool_name,
             metrics=metrics,
             standards_analysis=standards_analysis,
+            completeness_analysis=completeness_analysis,
             schema_results=schema_results,
             lint_issues=lint_issues,
             recommendations=recommendations,
@@ -177,10 +226,19 @@ class QualityAnalyzer:
         Returns:
             List of quality reports
         """
-        reports = []
-        total_tools = len(tools_data)
+        logger.info(f"Starting batch analysis of {len(tools_data)} tools")
         
-        for i, tool_data in enumerate(tools_data):
+        # Clean all tools in batch if enabled for better performance
+        if self.clean_data and self.data_cleaner:
+            logger.info("Cleaning tool data batch before analysis")
+            cleaned_tools_data = self.data_cleaner.clean_tools_batch(tools_data)
+        else:
+            cleaned_tools_data = tools_data
+        
+        reports = []
+        total_tools = len(cleaned_tools_data)
+        
+        for i, tool_data in enumerate(cleaned_tools_data):
             try:
                 logger.info(f"Analyzing tool {i+1}/{total_tools}")
                 report = self.analyze_tool(tool_data)
@@ -192,12 +250,14 @@ class QualityAnalyzer:
                 error_report = self._create_error_report(tool_data, str(e))
                 reports.append(error_report)
         
+        logger.info(f"Completed batch analysis: {len(reports)} tools processed")
         return reports
     
     def _calculate_metrics(
         self,
         tool_data: Dict,
         standards_analysis: Dict,
+        completeness_analysis: Dict,
         schema_results: Dict,
         lint_issues: List[LintIssue]
     ) -> QualityMetrics:
@@ -222,11 +282,20 @@ class QualityAnalyzer:
         has_functions = bool(tool_data.get("function"))
         has_docs = bool(tool_data.get("documentation"))
         has_pubs = bool(tool_data.get("publication"))
-        has_contacts = bool(tool_data.get("credit"))
         
-        # Calculate overall score
+        # Check for proper primary contacts (same logic as completeness scorer)
+        credits = tool_data.get("credit", [])
+        primary_contacts = []
+        for credit in credits:
+            if "Primary contact" in credit.get("typeRole", []):
+                if credit.get("email") or credit.get("url"):
+                    primary_contacts.append(credit)
+        has_contacts = len(primary_contacts) > 0
+        
+        # Calculate overall score (weighted average with emphasis on completeness)
         overall_score = self._calculate_overall_score(
             standards_analysis["score"],
+            completeness_analysis["completeness_score"],
             schema_results["error_count"],
             issue_counts,
             field_completeness,
@@ -242,6 +311,8 @@ class QualityAnalyzer:
             quality_grade=quality_grade,
             standards_tier=standards_analysis["tier_name"],
             standards_score=standards_analysis["score"],
+            completeness_tier=completeness_analysis["achieved_tier_name"],
+            completeness_score=completeness_analysis["completeness_score"],
             schema_valid=schema_results["valid"],
             schema_errors=schema_results["error_count"],
             schema_warnings=schema_results["warning_count"],
@@ -346,25 +417,30 @@ class QualityAnalyzer:
     def _calculate_overall_score(
         self,
         standards_score: float,
+        completeness_score: float,
         schema_errors: int,
         issue_counts: Dict[IssueLevel, int],
         field_completeness: float,
         url_health: float,
         edam_consistency: float
     ) -> float:
-        """Calculate overall quality score (0-100)."""
+        """Calculate overall quality score (0-100) with emphasis on completeness."""
         
-        # Weighted combination of different factors
+        # Updated weights with higher emphasis on Tool Information Standards completeness
         weights = {
-            "standards": 0.3,
-            "schema": 0.2,
-            "linting": 0.2,
-            "completeness": 0.15,
-            "content_quality": 0.15
+            "standards": 0.2,        # Legacy standards scorer (reduced)
+            "completeness": 0.35,    # New completeness scorer (primary)
+            "schema": 0.15,
+            "linting": 0.15,
+            "field_quality": 0.10,
+            "content_quality": 0.05
         }
         
-        # Standards score (0-100)
+        # Standards score (0-100) - legacy scorer
         standards_component = standards_score * weights["standards"]
+        
+        # Completeness score (0-100) - primary metric based on Tool Information Standards
+        completeness_component = completeness_score * weights["completeness"]
         
         # Schema validation score
         schema_score = 100 if schema_errors == 0 else max(0, 100 - schema_errors * 20)
@@ -380,18 +456,18 @@ class QualityAnalyzer:
         lint_score = max(0, 100 - lint_penalties)
         lint_component = lint_score * weights["linting"]
         
-        # Field completeness score
-        completeness_score = field_completeness * 100
-        completeness_component = completeness_score * weights["completeness"]
+        # Field completeness score (based on field presence)
+        field_quality_score = field_completeness * 100
+        field_quality_component = field_quality_score * weights["field_quality"]
         
         # Content quality score
         content_score = (url_health + edam_consistency) / 2 * 100
         content_component = content_score * weights["content_quality"]
         
-        # Final score
+        # Final score with all components
         final_score = (
-            standards_component + schema_component + lint_component +
-            completeness_component + content_component
+            standards_component + completeness_component + schema_component +
+            lint_component + field_quality_component + content_component
         )
         
         return round(final_score, 1)
@@ -485,6 +561,8 @@ class QualityAnalyzer:
             quality_grade="F",
             standards_tier="UNKNOWN",
             standards_score=0.0,
+            completeness_tier="NONE",
+            completeness_score=0.0,
             schema_valid=False,
             schema_errors=1,
             schema_warnings=0,
@@ -511,6 +589,7 @@ class QualityAnalyzer:
             tool_name=tool_name,
             metrics=metrics,
             standards_analysis={},
+            completeness_analysis={"achieved_tier_name": "NONE", "completeness_score": 0.0},
             schema_results={"valid": False, "errors": [{"message": error_message}]},
             lint_issues=[],
             recommendations=[],

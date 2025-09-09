@@ -12,6 +12,7 @@ plotly>=5.17.0
 # Data processing
 pydantic>=2.5.0
 click>=8.1.0
+boltons>=21.0.0
 
 # Development and testing
 pytest>=7.4.0
