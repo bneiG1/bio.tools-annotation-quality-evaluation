@@ -1,0 +1,160 @@
+# Bio.tools Annotation Quality Evaluation Configuration
+# 
+# This file contains the default configuration for the bio.tools quality evaluation system.
+# It includes logging settings, API configuration, scoring parameters, and output options.
+
+# System Configuration
+system:
+  # Logging Configuration
+  logging:
+    level: "INFO"                    # DEBUG, INFO, WARNING, ERROR
+    file_logging: true              # Enable file logging
+    console_logging: true           # Enable console logging
+    log_file: "biotools_quality_analysis.log"
+    log_dir: "logs"                 # Directory for log files
+    max_log_size: 10485760         # 10MB max log file size
+    backup_count: 5                # Number of backup log files
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    date_format: "%Y-%m-%d %H:%M:%S"
+
+  # API Client Configuration
+  api:
+    base_url: "https://bio.tools/api"
+    timeout: 30                    # Request timeout in seconds
+    max_retries: 3                 # Maximum number of retry attempts
+    rate_limit_delay: 0.1          # Delay between requests (seconds)
+    cache_responses: true          # Enable response caching
+    cache_duration: 3600           # Cache duration in seconds (1 hour)
+
+  # Output Configuration
+  output:
+    base_dir: "data/processed"     # Base output directory
+    create_subdirs: true           # Create date-based subdirectories
+    backup_results: false          # Keep backup of previous results
+    formats:
+      json: true                   # Save JSON results
+      csv: true                    # Save CSV exports
+      html: true                   # Generate HTML reports
+      excel: false                 # Generate Excel files
+    
+    # Visualization Configuration
+    visualization:
+      create_charts: true          # Generate visualization charts
+      chart_format: "png"          # Chart format (png, svg, pdf)
+      chart_dpi: 300              # Chart resolution
+      interactive: false           # Create interactive charts
+      color_scheme: "default"     # Color scheme for charts
+
+# Scoring Configuration
+scoring:
+  # Category weights (must sum to 100)
+  weights:
+    basic_info: 15                # Name, description, homepage
+    core_metadata: 25             # Publications, EDAM topics/operations
+    technical_info: 20            # Programming language, license, version
+    accessibility: 20             # Documentation, download links
+    advanced_features: 15         # Command-line usage, API details
+    community: 5                  # Credits, contacts, social
+
+  # Tier classification thresholds
+  tiers:
+    tier_1: [0, 15]               # SPARSE - minimal information
+    tier_2: [16, 40]              # BASIC DETAILS - some essential info
+    tier_3: [41, 65]              # DETAILED - good coverage
+    tier_4: [66, 85]              # HIGHLY DETAILED - comprehensive
+    tier_5: [86, 100]             # COMPREHENSIVE - excellent
+
+  # Individual field weights within categories
+  field_weights:
+    # Basic Information
+    name: 5
+    description: 8
+    homepage: 7
+    
+    # Core Metadata
+    publication: 15
+    topic: 10
+    operation: 8
+    function: 6
+    
+    # Technical Information
+    language: 4
+    license: 6
+    version: 5
+    maturity: 3
+    cost: 2
+    
+    # Accessibility
+    documentation: 12
+    download: 8
+    link: 5
+    
+    # Advanced Features
+    cmd: 6
+    api: 4
+    editorsNote: 3
+    
+    # Community
+    credit: 3
+    owner: 2
+    additionDate: 1
+    lastUpdate: 2
+
+  # Validation requirements
+  requirements:
+    required_fields:
+      - "biotoolsID"
+      - "name"
+      - "description"
+      - "homepage"
+      - "topic"
+      - "operation"
+    
+    recommended_fields:
+      - "publication"
+      - "license"
+      - "language"
+      - "documentation"
+      - "download"
+    
+    # Field validation rules
+    validation:
+      min_description_length: 50   # Minimum description length
+      max_description_length: 1000 # Maximum description length
+      url_timeout: 10              # URL validation timeout
+      check_urls: false            # Enable URL accessibility checks
+
+# Analysis Configuration
+analysis:
+  # Data cleaning options
+  data_cleaning:
+    enabled: true                  # Enable data cleaning
+    aggressive: false              # Use aggressive cleaning
+    remove_empty_strings: true     # Remove empty string fields
+    remove_empty_lists: true       # Remove empty list fields
+    normalize_urls: true           # Normalize URL formats
+    
+  # Linter integration
+  linter:
+    enabled: false                 # Enable bio.tools linter integration
+    path: "biotools-linter"        # Path to linter executable
+    timeout: 30                    # Linter execution timeout
+    
+  # Statistics and reporting
+  statistics:
+    calculate_trends: true         # Calculate quality trends
+    compare_collections: true      # Enable collection comparisons
+    generate_heatmaps: true        # Generate quality heatmaps
+    create_radar_charts: true      # Create radar charts
+
+# Development and Debug Settings
+development:
+  debug_mode: false               # Enable debug mode
+  verbose_api_logging: false      # Log all API requests/responses
+  cache_debug: false              # Log cache operations
+  profile_performance: false      # Enable performance profiling
+  
+  # Test configuration
+  test_mode: false                # Enable test mode
+  mock_api_responses: false       # Use mock API responses
+  sample_size: 10                 # Sample size for testing

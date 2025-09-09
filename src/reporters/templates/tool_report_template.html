@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quality Report: {tool_name}</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }}
+        .header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }}
+        .header h1 {{
+            margin: 0;
+            font-size: 2.5em;
+        }}
+        .header .subtitle {{
+            opacity: 0.9;
+            margin-top: 10px;
+        }}
+        .content {{
+            padding: 30px;
+        }}
+        .metrics-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }}
+        .metric-card {{
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            border-left: 4px solid #007bff;
+        }}
+        .metric-value {{
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }}
+        .metric-label {{
+            color: #6c757d;
+            font-size: 0.9em;
+        }}
+        .grade-badge {{
+            display: inline-block;
+            background: {grade_color};
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 1.2em;
+        }}
+        .section {{
+            margin-bottom: 30px;
+        }}
+        .section h2 {{
+            color: #495057;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 10px;
+        }}
+        .progress-bar {{
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            margin: 10px 0;
+        }}
+        .progress-fill {{
+            height: 100%;
+            background: linear-gradient(45deg, #28a745, #20c997);
+            transition: width 0.3s ease;
+        }}
+        .issue-list {{
+            list-style: none;
+            padding: 0;
+        }}
+        .issue-item {{
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #f39c12;
+        }}
+        .issue-critical {{
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            border-left-color: #dc3545;
+        }}
+        .issue-warning {{
+            background: #fff3cd;
+            border-color: #ffeaa7;
+            border-left-color: #f39c12;
+        }}
+        .issue-info {{
+            background: #d1ecf1;
+            border-color: #bee5eb;
+            border-left-color: #17a2b8;
+        }}
+        .issue-error {{
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            border-left-color: #dc3545;
+        }}
+        .recommendations {{
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 4px;
+            padding: 15px;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }}
+        th, td {{
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #dee2e6;
+        }}
+        th {{
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }}
+        .timestamp {{
+            color: #6c757d;
+            font-size: 0.9em;
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+        }}
+        .status-yes {{
+            color: #28a745;
+            font-weight: bold;
+        }}
+        .status-no {{
+            color: #dc3545;
+            font-weight: bold;
+        }}
+        .tier-badge {{
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }}
+        .tier-sparse {{
+            background: #6c757d;
+            color: white;
+        }}
+        .tier-minimal {{
+            background: #dc3545;
+            color: white;
+        }}
+        .tier-detailed {{
+            background: #fd7e14;
+            color: white;
+        }}
+        .tier-complete {{
+            background: #ffc107;
+            color: #212529;
+        }}
+        .tier-comprehensive {{
+            background: #28a745;
+            color: white;
+        }}
+        .tier-requirements {{
+            margin-top: 20px;
+        }}
+        .tier-section {{
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #dee2e6;
+        }}
+        .tier-section.achieved {{
+            border-left-color: #28a745;
+            background: #d4edda;
+        }}
+        .tier-section.current {{
+            border-left-color: #007bff;
+            background: #d1ecf1;
+        }}
+        .field-list {{
+            margin: 10px 0;
+            padding-left: 20px;
+        }}
+        .field-present {{
+            color: #28a745;
+        }}
+        .field-missing {{
+            color: #dc3545;
+        }}
+        .schema-details {{
+            margin-top: 15px;
+        }}
+        .schema-item {{
+            background: #f8f9fa;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-left: 3px solid #dee2e6;
+        }}
+        .schema-error {{
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }}
+        .schema-warning {{
+            border-left-color: #ffc107;
+            background: #fff3cd;
+        }}
+        .schema-path {{
+            font-family: monospace;
+            font-size: 0.85em;
+            color: #6c757d;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{tool_name}</h1>
+            <div class="subtitle">Quality Analysis Report • {tool_id}</div>
+        </div>
+        
+        <div class="content">
+            <!-- Quality Metrics Overview -->
+            <div class="section">
+                <h2>Quality Overview</h2>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-value"><span class="grade-badge">{quality_grade}</span></div>
+                        <div class="metric-label">Quality Grade</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">{overall_score}/100</div>
+                        <div class="metric-label">Overall Score</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">{standards_tier}</div>
+                        <div class="metric-label">Standards Tier</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">{completeness_score}/100</div>
+                        <div class="metric-label">Completeness Score</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Field Completeness -->
+            <div class="section">
+                <h2>Field Completeness</h2>
+                <div>Overall Completeness: {field_completeness_percent}</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {field_completeness_width}%"></div>
+                </div>
+                <div>Recommended Fields: {recommended_fields_percent}</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {recommended_fields_width}%"></div>
+                </div>
+            </div>
+            
+            <!-- Content Quality -->
+            <div class="section">
+                <h2>Content Quality</h2>
+                <table>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Status</th>
+                        <th>Quality Score</th>
+                    </tr>
+                    <tr>
+                        <td>Functions</td>
+                        <td class="{functions_status_class}">{functions_status}</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td>Documentation</td>
+                        <td class="{documentation_status_class}">{documentation_status}</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td>Publications</td>
+                        <td class="{publications_status_class}">{publications_status}</td>
+                        <td>{publication_quality}</td>
+                    </tr>
+                    <tr>
+                        <td>Contacts</td>
+                        <td class="{contacts_status_class}">{contacts_status}</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td>URL Health</td>
+                        <td>-</td>
+                        <td>{url_health}</td>
+                    </tr>
+                    <tr>
+                        <td>EDAM Consistency</td>
+                        <td>-</td>
+                        <td>{edam_consistency}</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <!-- Schema Validation -->
+            <div class="section">
+                <h2>Schema Validation</h2>
+                <p><strong>Status:</strong> <span class="{schema_status_class}">{schema_status}</span></p>
+                <p><strong>Errors:</strong> {schema_errors}</p>
+                <p><strong>Warnings:</strong> {schema_warnings}</p>
+                
+                {schema_details_content}
+            </div>
+            
+            <!-- Standards Tier Requirements -->
+            <div class="section">
+                <h2>Tool Information Standards Tiers</h2>
+                <div class="tier-requirements">
+                    <p><strong>Current Tier:</strong> <span class="tier-badge tier-{current_tier_lower}">{current_tier}</span></p>
+                    <p><strong>Completeness Score:</strong> {completeness_score}/100</p>
+                    
+                    {tier_requirements_content}
+                </div>
+            </div>
+            
+            <!-- Lint Issues -->
+            <div class="section">
+                <h2>Quality Issues ({lint_issues_count} total)</h2>
+                <ul class="issue-list">
+                    {lint_issues_content}
+                </ul>
+            </div>
+            
+            <!-- Recommendations -->
+            <div class="section">
+                <h2>Recommendations</h2>
+                <div class="recommendations">
+                    {recommendations_content}
+                </div>
+            </div>
+            
+            <!-- Summary -->
+            <div class="section">
+                <h2>Summary</h2>
+                <p>{summary}</p>
+            </div>
+            
+            <div class="timestamp">
+                Report generated on {analysis_date}
+            </div>
+        </div>
+    </div>
+</body>
+</html>
