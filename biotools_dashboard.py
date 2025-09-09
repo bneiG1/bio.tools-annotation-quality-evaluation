@@ -91,12 +91,24 @@ class BioToolsDataDashboard:
                 status_text.text(f"Loading {tool_file.name}...")
                 with open(tool_file, 'r', encoding='utf-8') as f:
                     tool_data = json.load(f)
+                    # Validate that we have basic required fields
+                    if not isinstance(tool_data, dict):
+                        st.warning(f"Invalid data format in {tool_file.name}: not a dictionary")
+                        continue
+                    
+                    # Ensure we have a biotoolsID
+                    if not tool_data.get('biotoolsID'):
+                        tool_data['biotoolsID'] = tool_file.stem.replace('tool', '')
+                    
                     # Add quality analysis metrics
                     analyzed_tool = _self._analyze_tool_quality(tool_data)
                     tools_data.append(analyzed_tool)
                 
                 progress_bar.progress((i + 1) / len(tool_files))
                 
+            except json.JSONDecodeError as e:
+                st.warning(f"JSON decode error in {tool_file.name}: {e}")
+                continue
             except Exception as e:
                 st.warning(f"Error loading {tool_file.name}: {e}")
                 continue
@@ -107,7 +119,7 @@ class BioToolsDataDashboard:
         return tools_data, stats_data
     
     def _analyze_tool_quality(self, tool_data: Dict) -> Dict:
-        """Analyze quality metrics for a tool."""
+        """Analyze quality metrics for a tool with safe field access."""
         quality_score = 0
         quality_factors = []
         
@@ -131,14 +143,14 @@ class BioToolsDataDashboard:
             quality_score += 15
             quality_factors.append("Has function annotations")
             # Extra points for detailed functions
-            total_operations = sum(len(f.get('operation', [])) for f in functions)
+            total_operations = sum(len(f.get('operation', [])) for f in functions if isinstance(f, dict))
             if total_operations >= 3:
                 quality_score += 5
                 quality_factors.append("Multiple operations defined")
-            if any(f.get('input') for f in functions):
+            if any(f.get('input') for f in functions if isinstance(f, dict)):
                 quality_score += 3
                 quality_factors.append("Has input specifications")
-            if any(f.get('output') for f in functions):
+            if any(f.get('output') for f in functions if isinstance(f, dict)):
                 quality_score += 2
                 quality_factors.append("Has output specifications")
         
@@ -165,7 +177,7 @@ class BioToolsDataDashboard:
         if contacts:
             quality_score += 5
             quality_factors.append("Has contact info")
-            if any(c.get('email') for c in contacts):
+            if any(c.get('email') for c in contacts if isinstance(c, dict)):
                 quality_score += 5
                 quality_factors.append("Has email contact")
         
@@ -192,7 +204,7 @@ class BioToolsDataDashboard:
             quality_tier = "Needs Improvement"
             quality_grade = "F"
         
-        # Add computed metrics to tool data
+        # Add computed metrics to tool data with safe counts
         tool_data['quality_metrics'] = {
             'overall_score': quality_score,
             'quality_grade': quality_grade,
@@ -205,7 +217,7 @@ class BioToolsDataDashboard:
             'documentation_count': len(docs),
             'has_homepage': bool(tool_data.get('homepage')),
             'has_version': bool(tool_data.get('version')),
-            'edam_operations': sum(len(f.get('operation', [])) for f in functions),
+            'edam_operations': sum(len(f.get('operation', [])) for f in functions if isinstance(f, dict)),
             'edam_topics': len(topics)
         }
         
@@ -314,11 +326,11 @@ class BioToolsDataDashboard:
         if not self.tools_data:
             return
         
-        # Prepare data
+        # Prepare data with safe field access
         df_tools = pd.DataFrame([
             {
-                'Tool': tool['name'],
-                'ID': tool['biotoolsID'],
+                'Tool': tool.get('name', tool.get('biotoolsID', 'Unknown')),
+                'ID': tool.get('biotoolsID', 'Unknown'),
                 'Score': tool['quality_metrics']['overall_score'],
                 'Grade': tool['quality_metrics']['quality_grade'],
                 'Tier': tool['quality_metrics']['quality_tier'],
@@ -474,11 +486,17 @@ class BioToolsDataDashboard:
         if not self.tools_data:
             return
         
-        # Prepare data for table
+        # Prepare data for table with safe field access
         table_data = []
         for tool in self.tools_data:
+            description = tool.get('description', '')
+            if description and len(description) > 100:
+                description = description[:100] + '...'
+            elif not description:
+                description = 'No description'
+            
             row = {
-                'Tool Name': tool.get('name', 'Unknown'),
+                'Tool Name': tool.get('name', tool.get('biotoolsID', 'Unknown')),
                 'ID': tool.get('biotoolsID', 'Unknown'),
                 'Quality Score': tool['quality_metrics']['overall_score'],
                 'Grade': tool['quality_metrics']['quality_grade'],
@@ -486,7 +504,7 @@ class BioToolsDataDashboard:
                 'Topics': tool['quality_metrics']['topic_count'],
                 'Publications': tool['quality_metrics']['publication_count'],
                 'Homepage': '✅' if tool['quality_metrics']['has_homepage'] else '❌',
-                'Description': tool.get('description', '')[:100] + '...' if tool.get('description') else 'No description'
+                'Description': description
             }
             table_data.append(row)
         
@@ -569,20 +587,23 @@ class BioToolsDataDashboard:
         if not self.tools_data:
             return
         
-        # Tool selector
-        tool_names = [f"{tool['biotoolsID']} - {tool.get('name', 'Unknown')}" for tool in self.tools_data]
+        # Tool selector with safe access
+        tool_names = [
+            f"{tool.get('biotoolsID', 'unknown')} - {tool.get('name', 'Unknown Tool')}" 
+            for tool in self.tools_data
+        ]
         selected_tool_name = st.selectbox("Select a tool for detailed analysis", tool_names)
         
         if selected_tool_name:
             tool_id = selected_tool_name.split(' - ')[0]
-            selected_tool = next((tool for tool in self.tools_data if tool['biotoolsID'] == tool_id), None)
+            selected_tool = next((tool for tool in self.tools_data if tool.get('biotoolsID') == tool_id), None)
             
             if selected_tool:
                 metrics = selected_tool['quality_metrics']
                 
-                # Tool header
+                # Tool header with safe access
                 st.markdown(f"### {selected_tool.get('name', 'Unknown Tool')}")
-                st.markdown(f"**Bio.tools ID:** {selected_tool['biotoolsID']}")
+                st.markdown(f"**Bio.tools ID:** {selected_tool.get('biotoolsID', 'Unknown')}")
                 
                 if selected_tool.get('description'):
                     st.markdown(f"**Description:** {selected_tool['description']}")
