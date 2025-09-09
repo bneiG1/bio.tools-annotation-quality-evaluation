@@ -27,7 +27,11 @@ def main():
     print("Press Ctrl+C to stop the server.")
     
     try:
-        subprocess.run(cmd, check=True)
+        # Use shell=True and redirect output to NUL on Windows
+        if sys.platform == "win32":
+            subprocess.run(" ".join(cmd) + " > NUL", shell=True, check=True)
+        else:
+            subprocess.run(cmd, check=True)
     except KeyboardInterrupt:
         print("\n👋 Application stopped.")
     except subprocess.CalledProcessError as e:
