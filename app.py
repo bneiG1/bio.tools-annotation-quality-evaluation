@@ -27,22 +27,25 @@ sys.path.append(str(Path(__file__).parent / 'src'))
 try:
     from src.collectors.biotools_api import BioToolsAPIClient
     from src.analyzers.quality_analyzer import QualityAnalyzer, QualityReport
+    from src.reporters.quality_reporter import QualityReporter
     from src.utils.logger import Logger
     MODULES_AVAILABLE = True
     BioToolsAPIClientType = BioToolsAPIClient
     QualityAnalyzerType = QualityAnalyzer
+    QualityReporterType = QualityReporter
 except ImportError as e:
     logging.warning(f"Some modules not available: {e}")
     MODULES_AVAILABLE = False
     BioToolsAPIClientType = None
     QualityAnalyzerType = None
+    QualityReporterType = None
 
 # Configure Streamlit page
 st.set_page_config(
     page_title="Bio.tools Live Quality Analyzer",
     page_icon="🔬",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # Add health check for deployment platforms
@@ -53,46 +56,308 @@ if 'health_check' not in st.session_state:
         'modules_available': MODULES_AVAILABLE
     }
 
-# Custom CSS for better styling
+# Custom CSS for bio.tools-inspired styling
 st.markdown("""
 <style>
-    .main-header {
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem;
-        border-radius: 10px;
-        margin-bottom: 2rem;
+    /* Import similar font to bio.tools */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+    
+    /* Hide Streamlit default elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {display:none;}
+    
+    /* Global styling */
+    .stApp {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Avenir Next", Avenir,
+            "Nimbus Sans L", Roboto, "Noto Sans", "Segoe UI", Arial, Helvetica,
+            "Helvetica Neue", sans-serif;
+        background-color: #fff;
+    }
+    
+    /* Navigation header similar to bio.tools */
+    .biotools-nav {
+        background-color: #f9faff;
+        border-bottom: 1px solid #898EA4;
+        padding: 1rem 0;
+        margin: -1rem -1rem 2rem -1rem;
+        position: relative;
+        z-index: 1000;
+    }
+    
+    .nav-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 2rem;
+    }
+    
+    .nav-logo {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #212121;
+        text-decoration: none;
+    }
+    
+    .nav-links {
+        display: flex;
+        gap: 2rem;
+        align-items: center;
+    }
+    
+    .nav-link {
+        color: #212121;
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 0.95rem;
+        padding: 0.5rem 1rem;
+        border-radius: 5px;
+        transition: background-color 0.2s;
+    }
+    
+    .nav-link:hover {
+        background-color: #e8ebff;
+    }
+    
+    .nav-search {
+        position: relative;
+        margin: 0 2rem;
+    }
+    
+    /* Main content area */
+    .main-content {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+    
+    /* Hero section */
+    .hero-section {
         text-align: center;
+        margin-bottom: 3rem;
+        padding: 3rem 2rem;
+        background: linear-gradient(135deg, #f9faff 0%, #e8ebff 100%);
+        border-radius: 10px;
+        border: 1px solid #e0e4e7;
     }
-    .metric-card {
-        background: white;
-        padding: 1rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        border-left: 4px solid #667eea;
+    
+    .hero-title {
+        font-size: 3rem;
+        font-weight: 600;
+        color: #212121;
         margin-bottom: 1rem;
+        line-height: 1.1;
     }
+    
+    .hero-subtitle {
+        font-size: 1.2rem;
+        color: #585858;
+        margin-bottom: 2rem;
+        line-height: 1.5;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    
+    /* Card styling */
+    .tool-card {
+        background: #fff;
+        border: 1px solid #e0e4e7;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        transition: box-shadow 0.2s, border-color 0.2s;
+    }
+    
+    .tool-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        border-color: #f47d21;
+    }
+    
+    /* Quality badges */
     .quality-badge {
         display: inline-block;
-        padding: 0.5rem 1rem;
+        padding: 0.4rem 0.8rem;
         border-radius: 20px;
-        font-weight: bold;
-        margin: 0.2rem;
+        font-weight: 500;
+        font-size: 0.85rem;
+        margin: 0.2rem 0.3rem 0.2rem 0;
     }
-    .grade-A { background-color: #28a745; color: white; }
-    .grade-B { background-color: #6f42c1; color: white; }
-    .grade-C { background-color: #ffc107; color: black; }
-    .grade-D { background-color: #fd7e14; color: white; }
-    .grade-F { background-color: #dc3545; color: white; }
-    .tier-1 { background-color: #ff4d4d; color: white; }
-    .tier-2 { background-color: #ff9933; color: white; }
-    .tier-3 { background-color: #ffcc00; color: black; }
-    .tier-4 { background-color: #66cc00; color: white; }
-    .tier-5 { background-color: #00cc66; color: white; }
+    
+    .grade-A { background-color: #74c365; color: white; }
+    .grade-B { background-color: #4a90e2; color: white; }
+    .grade-C { background-color: #f39c12; color: white; }
+    .grade-D { background-color: #e67e22; color: white; }
+    .grade-F { background-color: #e74c3c; color: white; }
+    
+    /* Metrics section */
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+        margin: 2rem 0;
+    }
+    
+    .metric-card {
+        background: #fff;
+        border: 1px solid #e0e4e7;
+        border-radius: 8px;
+        padding: 1.5rem;
+        text-align: center;
+        border-left: 4px solid #f47d21;
+        transition: transform 0.2s;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .metric-value {
+        font-size: 2rem;
+        font-weight: 600;
+        color: #212121;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-label {
+        color: #585858;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+    
+    /* Section headers */
+    .section-header {
+        font-size: 2rem;
+        font-weight: 600;
+        color: #212121;
+        margin: 3rem 0 1.5rem 0;
+        border-bottom: 2px solid #f47d21;
+        padding-bottom: 0.5rem;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        background-color: #f47d21;
+        color: white;
+        border: none;
+        padding: 0.6rem 1.5rem;
+        border-radius: 5px;
+        font-weight: 500;
+        transition: background-color 0.2s;
+    }
+    
+    .stButton > button:hover {
+        background-color: #e06a1a;
+        border: none;
+    }
+    
+    /* Sidebar styling */
+    .css-1d391kg {
+        background-color: #f9faff;
+    }
+    
+    /* Progress bars */
     .stProgress .stProgress-bar {
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        background-color: #f47d21;
+    }
+    
+    /* Footer section */
+    .footer-section {
+        background-color: #f9faff;
+        border-top: 1px solid #e0e4e7;
+        padding: 3rem 2rem 2rem 2rem;
+        margin: 4rem -2rem -2rem -2rem;
+        text-align: center;
+    }
+    
+    .footer-links {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 2rem;
+        max-width: 1000px;
+        margin: 0 auto 2rem auto;
+        text-align: left;
+    }
+    
+    .footer-column h4 {
+        color: #212121;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        font-size: 1.1rem;
+    }
+    
+    .footer-column a {
+        color: #585858;
+        text-decoration: none;
+        display: block;
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+    }
+    
+    .footer-column a:hover {
+        color: #f47d21;
+    }
+    
+    /* Responsive design */
+    @media only screen and (max-width: 768px) {
+        .hero-title {
+            font-size: 2rem;
+        }
+        
+        .nav-container {
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .main-content {
+            padding: 1rem;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
+
+def render_footer():
+    """Render the bio.tools-inspired footer."""
+    st.markdown("""
+    <div class="footer-section">
+        <div class="footer-links">
+            <div class="footer-column">
+                <h4>Tools</h4>
+                <a href="https://bio.tools" target="_blank">Bio.tools</a>
+                <a href="https://biotools.readthedocs.io/" target="_blank">Documentation</a>
+                <a href="https://biotools.readthedocs.io/en/latest/api_reference.html" target="_blank">API Reference</a>
+                <a href="https://github.com/bio-tools/biotoolsregistry" target="_blank">Source Code</a>
+            </div>
+            <div class="footer-column">
+                <h4>Analysis</h4>
+                <a href="#" onclick="return false;">Quality Scoring</a>
+                <a href="#" onclick="return false;">Standards Compliance</a>
+                <a href="#" onclick="return false;">Schema Validation</a>
+                <a href="#" onclick="return false;">Completeness Metrics</a>
+            </div>
+            <div class="footer-column">
+                <h4>Support</h4>
+                <a href="https://github.com/bio-tools/biotoolsRegistry/issues" target="_blank">Issues</a>
+                <a href="mailto:support-bio-tools@sdu.dk">Email Support</a>
+                <a href="https://biotools.readthedocs.io/en/latest/what_is_biotools.html#getting-involved-a-quick-start-guide" target="_blank">Getting Involved</a>
+                <a href="https://biotools.readthedocs.io/en/latest/contributors.html" target="_blank">Contributors</a>
+            </div>
+            <div class="footer-column">
+                <h4>About</h4>
+                <a href="https://bio.tools/about" target="_blank">About Bio.tools</a>
+                <a href="https://bio.tools/stats" target="_blank">Statistics</a>
+                <a href="https://biotools.readthedocs.io/en/latest/license.html" target="_blank">Licensing</a>
+                <a href="https://www.elixir-europe.org/" target="_blank">ELIXIR</a>
+            </div>
+        </div>
+        <p style="color: #585858; font-size: 0.85rem; margin-top: 2rem;">
+            Bio.tools Quality Analyzer - Real-time tool quality analysis powered by the bio.tools API
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
 class LiveBioToolsAnalyzer:
     """Live bio.tools quality analyzer with real-time API integration."""
@@ -111,11 +376,33 @@ class LiveBioToolsAnalyzer:
             st.session_state.analysis_history = []
     
     def render_header(self):
-        """Render the application header."""
+        """Render the bio.tools-inspired navigation header."""
         st.markdown("""
-        <div class="main-header">
-            <h1 style="color: white; margin: 0;">🔬 Bio.tools Live Quality Analyzer</h1>
-            <p style="color: #f0f0f0; margin: 0.5rem 0 0 0;">Real-time tool quality analysis with biotools API</p>
+        <div class="biotools-nav">
+            <div class="nav-container">
+                <div class="nav-logo">
+                    🔬 Bio.tools Quality Analyzer
+                </div>
+                <div class="nav-search">
+                    <!-- Search will be in main content -->
+                </div>
+                <div class="nav-links">
+                    <a href="#" class="nav-link">Analyze</a>
+                    <a href="#" class="nav-link">About</a>
+                    <a href="https://bio.tools" target="_blank" class="nav-link">Bio.tools</a>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Hero section
+        st.markdown("""
+        <div class="hero-section">
+            <h1 class="hero-title">Bio.tools Quality Analyzer</h1>
+            <p class="hero-subtitle">
+                Real-time quality analysis for bioinformatics tools and services. 
+                Analyze tool metadata completeness, standards compliance, and overall quality scores.
+            </p>
         </div>
         """, unsafe_allow_html=True)
     
@@ -152,49 +439,65 @@ class LiveBioToolsAnalyzer:
     
     def render_search_interface(self):
         """Render the search and analysis interface."""
-        st.sidebar.header("🔍 Analysis Options")
         
-        # Analysis mode selection
-        analysis_mode = st.sidebar.selectbox(
-            "Analysis Mode",
-            ["Single Tool", "Search Tools", "Random Tools", "Collection Analysis"],
-            help="Choose how you want to analyze tools"
-        )
+        # Create columns for the interface
+        col1, col2, col3 = st.columns([1, 2, 1])
         
-        if analysis_mode == "Single Tool":
-            return self.render_single_tool_interface()
-        elif analysis_mode == "Search Tools":
-            return self.render_search_tools_interface()
-        elif analysis_mode == "Random Tools":
-            return self.render_random_tools_interface()
-        elif analysis_mode == "Collection Analysis":
-            return self.render_collection_interface()
+        with col2:
+            st.markdown('<h2 class="section-header">Analyze Tools</h2>', unsafe_allow_html=True)
+            
+            # Analysis mode selection with tabs
+            tab1, tab2, tab3, tab4 = st.tabs(["🔍 Single Tool", "🔎 Search Tools", "🎲 Random Tools", "📊 Collection"])
+            
+            with tab1:
+                return self.render_single_tool_interface()
+            
+            with tab2:
+                return self.render_search_tools_interface()
+                
+            with tab3:
+                return self.render_random_tools_interface()
+                
+            with tab4:
+                return self.render_collection_interface()
+        
+        return None
     
     def render_single_tool_interface(self):
         """Render single tool analysis interface."""
-        st.sidebar.subheader("Single Tool Analysis")
+        st.markdown("### Single Tool Analysis")
+        st.write("Analyze a specific tool by its bio.tools ID")
         
-        tool_id = st.sidebar.text_input(
-            "Bio.tools ID",
-            placeholder="e.g., blast, clustalw, galaxy",
-            help="Enter the exact bio.tools ID of the tool you want to analyze"
-        )
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            tool_id = st.text_input(
+                "Bio.tools ID",
+                placeholder="e.g., blast, clustalw, galaxy",
+                help="Enter the exact bio.tools ID of the tool you want to analyze",
+                label_visibility="collapsed"
+            )
         
-        if st.sidebar.button("🔍 Analyze Tool", disabled=not tool_id):
+        with col2:
+            analyze_btn = st.button("🔍 Analyze Tool", disabled=not tool_id, use_container_width=True)
+        
+        if analyze_btn and tool_id:
             return self.analyze_single_tool(tool_id)
         
         return None
     
     def render_search_tools_interface(self):
         """Render search tools interface."""
-        st.sidebar.subheader("Search Tools")
+        st.markdown("### Search and Analyze Tools")
+        st.write("Search for tools by keywords and analyze multiple results")
         
-        col1, col2 = st.sidebar.columns(2)
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
         with col1:
             query = st.text_input(
                 "Search Query",
-                placeholder="e.g., alignment, genome",
-                help="Search for tools by name, description, or keywords"
+                placeholder="e.g., alignment, genome, protein",
+                help="Search for tools by name, description, or keywords",
+                label_visibility="collapsed"
             )
         
         with col2:
@@ -206,45 +509,92 @@ class LiveBioToolsAnalyzer:
                 help="Maximum number of tools to analyze"
             )
         
-        # Advanced search options
-        with st.sidebar.expander("Advanced Options"):
-            sort_by = st.selectbox(
-                "Sort by",
-                ["lastUpdate", "additionDate", "name", "score"],
-                help="How to sort the search results"
-            )
-            
-            sort_order = st.selectbox(
-                "Sort order",
-                ["desc", "asc"],
-                help="Ascending or descending order"
-            )
+        with col3:
+            search_btn = st.button("🔍 Search & Analyze", disabled=not query, use_container_width=True)
         
-        if st.sidebar.button("🔍 Search & Analyze", disabled=not query):
+        # Advanced search options in expander
+        with st.expander("🔧 Advanced Options"):
+            col1, col2 = st.columns(2)
+            with col1:
+                sort_by = st.selectbox(
+                    "Sort by",
+                    ["lastUpdate", "additionDate", "name", "score"],
+                    help="How to sort the search results"
+                )
+            
+            with col2:
+                sort_order = st.selectbox(
+                    "Sort order",
+                    ["desc", "asc"],
+                    help="Ascending or descending order"
+                )
+        
+        if search_btn and query:
             return self.search_and_analyze_tools(query, max_tools, sort_by, sort_order)
         
         return None
     
     def render_random_tools_interface(self):
         """Render random tools analysis interface."""
-        st.sidebar.subheader("Random Tools Analysis")
+        st.markdown("### Random Tools Analysis")
+        st.write("Analyze a random sample of tools from bio.tools")
         
-        num_tools = st.sidebar.number_input(
-            "Number of Tools",
-            min_value=1,
-            max_value=20,
-            value=5,
-            help="Number of random tools to analyze"
-        )
+        col1, col2 = st.columns([2, 1])
         
-        if st.sidebar.button("🎲 Analyze Random Tools"):
+        with col1:
+            num_tools = st.number_input(
+                "Number of Tools",
+                min_value=1,
+                max_value=20,
+                value=5,
+                help="Number of random tools to analyze"
+            )
+        
+        with col2:
+            random_btn = st.button("🎲 Analyze Random Tools", use_container_width=True)
+        
+        if random_btn:
             return self.analyze_random_tools(num_tools)
         
         return None
     
     def render_collection_interface(self):
         """Render collection analysis interface."""
-        st.sidebar.subheader("Collection Analysis")
+        st.markdown("### Collection Analysis")
+        st.write("Analyze tools from predefined collections or domains")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            collection_option = st.selectbox(
+                "Collection Type",
+                ["COVID-19 Tools", "Recent Tools", "Popular Tools", "Custom Collection"],
+                help="Choose a predefined collection or create a custom one"
+            )
+        
+        with col2:
+            collection_btn = st.button("📊 Analyze Collection", use_container_width=True)
+        
+        if collection_option == "Custom Collection":
+            st.text_area(
+                "Tool IDs (one per line)",
+                placeholder="blast\nclustalw\ngalaxy",
+                help="Enter bio.tools IDs, one per line"
+            )
+        
+        if collection_btn:
+            if collection_option == "COVID-19 Tools":
+                # Use search for COVID-19 related tools
+                return self.search_and_analyze_tools("covid", 10, "lastUpdate", "desc")
+            elif collection_option == "Recent Tools":
+                # Use search for recent tools
+                return self.search_and_analyze_tools("*", 10, "lastUpdate", "desc")
+            elif collection_option == "Popular Tools":
+                # Use search for popular tools
+                return self.search_and_analyze_tools("*", 10, "score", "desc")
+            # Add custom collection handling later
+        
+        return None
         
         collection_id = st.sidebar.text_input(
             "Custom Collection ID",
@@ -538,13 +888,12 @@ class LiveBioToolsAnalyzer:
                 return
             
             # Generate collection summary
-            print(f"DEBUG: About to display {len(results)} results")
-            self.display_collection_results(results, collection_id)
+            print(f"DEBUG: Generated analysis for {len(results)} results")
             
             progress_bar.progress(100)
             status_text.text("✅ Collection analysis complete!")
             
-            # Store results
+            # Store results in session state - display will be handled by main run() method
             st.session_state.current_analysis = {
                 'type': 'collection',
                 'collection_id': collection_id,
@@ -658,9 +1007,149 @@ class LiveBioToolsAnalyzer:
         
         # Recommendations
         if hasattr(report, 'recommendations') and report.recommendations:
-            st.subheader("💡 Recommendations")
+            st.subheader("💡 Comprehensive Improvement Recommendations")
+            
+            # Parse different types of recommendations
+            tier_sections = []
+            current_section = []
+            critical_issues = []
+            warnings = []
+            
             for rec in report.recommendations:
-                st.write(f"- {rec}")
+                if not rec.strip():
+                    continue
+                    
+                if "**📈 To achieve" in rec:
+                    # Start new tier section
+                    if current_section:
+                        tier_sections.append(current_section)
+                    current_section = [rec]
+                elif "**� Critical Issues" in rec:
+                    critical_issues.append(rec)
+                elif "**⚠️ Additional Improvements" in rec:
+                    warnings.append(rec)
+                elif current_section:
+                    # Add to current tier section
+                    current_section.append(rec)
+                else:
+                    # General recommendation
+                    if not critical_issues and not warnings:
+                        current_section.append(rec)
+            
+            # Add last section
+            if current_section:
+                tier_sections.append(current_section)
+            
+            # Display tier roadmap
+            if tier_sections:
+                st.markdown("### 🎯 Tier Advancement Roadmap")
+                st.markdown("Follow this roadmap to systematically improve your tool's metadata quality:")
+                
+                with st.expander("📈 Complete Roadmap (Click to expand)", expanded=len(tier_sections) <= 2):
+                    for section in tier_sections:
+                        for line in section:
+                            if "**📈" in line:
+                                st.markdown(line, unsafe_allow_html=True)
+                            else:
+                                st.markdown(line, unsafe_allow_html=True)
+                        st.markdown("")  # Add spacing between tiers
+            
+            # Display critical issues
+            if critical_issues:
+                st.markdown("### � Critical Issues")
+                st.error("These issues should be addressed first as they significantly impact tool quality:")
+                for issue in critical_issues:
+                    if issue.strip():
+                        st.markdown(issue, unsafe_allow_html=True)
+            
+            # Display warnings
+            if warnings:
+                st.markdown("### ⚠️ Additional Improvements")
+                st.warning("These improvements will further enhance your tool's quality:")
+                for warning in warnings:
+                    if warning.strip():
+                        st.markdown(warning, unsafe_allow_html=True)
+            
+            # Add helpful guidance
+            st.markdown("### � How to Use These Recommendations")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("""
+                **🎯 Prioritization Strategy:**
+                1. **Critical Issues** - Fix these first
+                2. **Next Tier Fields** - Focus on the next tier you want to achieve
+                3. **Quality Improvements** - Enhance existing fields
+                4. **Additional Warnings** - Address when time permits
+                """)
+            
+            with col2:
+                st.markdown("""
+                **📈 Tier Benefits:**
+                - **MINIMAL**: Better findability in searches
+                - **DETAILED**: Complete technical information
+                - **COMPLETE**: Full accessibility metadata
+                - **COMPREHENSIVE**: Publication-ready quality
+                """)
+            
+            st.info("""
+            💡 **Pro Tips:**
+            - Complete one tier at a time for systematic improvement
+            - Each tier builds on the previous one - don't skip ahead
+            - Quality improvements can boost your score even within the same tier  
+            - Check back after updates to see your progress!
+            """)
+        else:
+            st.info("No specific recommendations available - tool appears to be well-documented!")
+        
+        # Download options for single tool
+        st.markdown("### 📥 Download Analysis Results")
+        st.markdown("Export this tool's analysis in various formats:")
+        
+        try:
+            if MODULES_AVAILABLE and QualityReporterType:
+                reporter = QualityReporterType()
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    # JSON download
+                    json_data = reporter.export_single_tool_data(report, format="json")
+                    st.download_button(
+                        label="📄 Download JSON",
+                        data=json_data,
+                        file_name=f"{tool_id}_analysis.json",
+                        mime="application/json",
+                        help="Complete analysis data in JSON format"
+                    )
+                
+                with col2:
+                    # CSV download
+                    csv_data = reporter.export_single_tool_data(report, format="csv")
+                    st.download_button(
+                        label="📊 Download CSV",
+                        data=csv_data,
+                        file_name=f"{tool_id}_analysis.csv",
+                        mime="text/csv",
+                        help="Analysis metrics in spreadsheet format"
+                    )
+                
+                with col3:
+                    # Excel download
+                    excel_data = reporter.export_single_tool_data(report, format="excel")
+                    st.download_button(
+                        label="📋 Download Excel",
+                        data=excel_data,
+                        file_name=f"{tool_id}_analysis.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        help="Detailed analysis with multiple sheets"
+                    )
+            else:
+                st.info("📥 Download functionality requires complete module installation")
+        
+        except Exception as e:
+            st.warning(f"Download functionality temporarily unavailable: {str(e)}")
         
         # Raw data
         with st.expander("📄 Raw Tool Data"):
@@ -671,6 +1160,14 @@ class LiveBioToolsAnalyzer:
         if not analyses:
             st.warning("No analysis results to display")
             return
+        
+        # Initialize reporter for export functionality
+        reporter = None
+        try:
+            from src.reporters.quality_reporter import QualityReporter
+            reporter = QualityReporter()
+        except ImportError:
+            st.warning("Export functionality unavailable - QualityReporter module not found")
         
         st.header(f"Bulk Analysis Results ({len(analyses)} tools)")
         
@@ -750,15 +1247,92 @@ class LiveBioToolsAnalyzer:
             df = pd.DataFrame(table_data)
             st.dataframe(df, width='stretch', key=f"bulk_dataframe_{uuid.uuid4().hex[:8]}")
             
-            # Download button
-            csv = df.to_csv(index=False)
-            st.download_button(
-                label="📥 Download Results as CSV",
-                data=csv,
-                file_name=f"biotools_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                key=f"bulk_download_csv_{uuid.uuid4().hex[:8]}"
-            )
+            # Download section with multiple formats
+            st.markdown("### 📥 Download Analysis Results")
+            
+            # Filter valid analyses for detailed export
+            valid_analyses = [a for a in analyses if a and a.get('quality_report')]
+            valid_reports = [a['quality_report'] for a in valid_analyses if a.get('quality_report')]
+            
+            if valid_reports:
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    # Summary CSV
+                    csv = df.to_csv(index=False)
+                    st.download_button(
+                        label="� Summary CSV",
+                        data=csv,
+                        file_name=f"biotools_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        key=f"bulk_summary_csv_{uuid.uuid4().hex[:8]}"
+                    )
+                
+                if reporter:
+                    with col2:
+                        # Detailed analysis export
+                        try:
+                            detailed_data = reporter.export_detailed_data(
+                                valid_reports, 
+                                format='csv'
+                            )
+                            st.download_button(
+                                label="📋 Detailed CSV",
+                                data=detailed_data,
+                                file_name=f"biotools_detailed_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv",
+                                key=f"bulk_detailed_csv_{uuid.uuid4().hex[:8]}"
+                            )
+                        except Exception as e:
+                            st.error(f"Error generating detailed CSV: {str(e)}")
+                    
+                    with col3:
+                        # JSON export
+                        try:
+                            json_data = reporter.export_detailed_data(
+                                valid_reports, 
+                                format='json'
+                            )
+                            st.download_button(
+                                label="📄 JSON Export",
+                                data=json_data,
+                                file_name=f"biotools_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                                mime="application/json",
+                                key=f"bulk_json_{uuid.uuid4().hex[:8]}"
+                            )
+                        except Exception as e:
+                            st.error(f"Error generating JSON: {str(e)}")
+                    
+                    with col4:
+                        # Excel export
+                        try:
+                            excel_data = reporter.export_detailed_data(
+                                valid_reports, 
+                                format='excel'
+                            )
+                            st.download_button(
+                                label="📈 Excel Report",
+                                data=excel_data,
+                                file_name=f"biotools_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key=f"bulk_excel_{uuid.uuid4().hex[:8]}"
+                            )
+                        except Exception as e:
+                            st.error(f"Error generating Excel: {str(e)}")
+                
+                # Add information about export formats
+                with st.expander("ℹ️ Export Format Information"):
+                    st.markdown("""
+                    **Summary CSV**: Basic overview table with grades, scores, and key metrics
+                    
+                    **Detailed CSV**: Comprehensive analysis including all recommendations and detailed scores
+                    
+                    **JSON Export**: Complete analysis data in structured format for programmatic use
+                    
+                    **Excel Report**: Multi-sheet workbook with summary, detailed analysis, and recommendations
+                    """)
+            else:
+                st.info("No valid analyses available for detailed export.")
         
         # Individual tool details
         st.subheader("🔍 Individual Tool Details")
@@ -910,10 +1484,10 @@ class LiveBioToolsAnalyzer:
                 sort_by = st.selectbox(
                     "Sort by:",
                     ['Quality Grade', 'Overall Score', 'Standards Tier', 'Lint Issues', 'Tool Name'],
-                    key="collection_sort"
+                    key=f"collection_sort_{uuid.uuid4().hex[:8]}"
                 )
             with sort_col2:
-                ascending = st.checkbox("Ascending", key="collection_sort_asc")
+                ascending = st.checkbox("Ascending", key=f"collection_sort_asc_{uuid.uuid4().hex[:8]}")
             
             # Sort dataframe
             if sort_by in df.columns:
@@ -954,7 +1528,7 @@ class LiveBioToolsAnalyzer:
             selected_tool = st.selectbox(
                 "Select a tool to view detailed analysis:",
                 [''] + tool_options,
-                key="collection_tool_select"
+                key=f"collection_tool_select_{collection_id.replace(' ', '_').replace('-', '_')}"
             )
             
             if selected_tool:
@@ -962,8 +1536,9 @@ class LiveBioToolsAnalyzer:
                 selected_analysis = next((a for a in analyses if a and a['tool_id'] == tool_id), None)
                 
                 if selected_analysis:
-                    with st.expander(f"📊 Detailed Analysis: {selected_analysis['tool_name']}", expanded=True):
-                        self.display_single_tool_results(selected_analysis)
+                    st.markdown("---")  # Separator line
+                    st.markdown("## 📊 Individual Tool Analysis")
+                    self.display_single_tool_results(selected_analysis)
     
     def render_analysis_history(self):
         """Render analysis history sidebar."""
@@ -994,8 +1569,12 @@ class LiveBioToolsAnalyzer:
             # Check if this is a collection analysis
             if (isinstance(st.session_state.current_analysis, dict) and 
                 st.session_state.current_analysis.get('type') == 'collection'):
-                # Collection analysis - display_collection_results is already called in analyze_collection
-                pass
+                # Collection analysis - display results including dropdown interactions
+                collection_data = st.session_state.current_analysis
+                self.display_collection_results(
+                    collection_data.get('results', []), 
+                    collection_data.get('collection_id', 'Unknown')
+                )
             else:
                 # Single tool analysis
                 self.display_single_tool_results(st.session_state.current_analysis)
@@ -1039,6 +1618,9 @@ class LiveBioToolsAnalyzer:
             
             **Ready to start?** Choose an analysis mode from the sidebar! 👈
             """)
+        
+        # Add footer
+        render_footer()
 
 
 def main():

@@ -442,32 +442,98 @@ class ToolInformationStandardsScorer:
         return min(100.0, round(base_score + quality_bonus, 1))
     
     def _generate_recommendations(self, field_analysis: Dict, achieved_tier: Tier, tool_data: Dict) -> List[str]:
-        """Generate recommendations for improvement."""
+        """Generate comprehensive recommendations for all tiers."""
         recommendations = []
         
-        # Recommend next tier if not at maximum
-        if achieved_tier.value < 5:
-            next_tier = Tier(achieved_tier.value + 1)
+        # If already at highest tier, congratulate
+        if achieved_tier.value == 5:
+            recommendations.append("🎉 Congratulations! Tool has achieved the highest tier (TIER 5) - excellent quality!")
+            return recommendations
+        
+        # Generate recommendations for all higher tiers
+        for tier_value in range(achieved_tier.value + 1, 6):  # Up to TIER 5
+            next_tier = Tier(tier_value)
             next_requirements = self.TIER_REQUIREMENTS[next_tier]
             
-            recommendations.append(f"To achieve {next_tier.name} tier:")
+            recommendations.append(f"\n**📈 To achieve {next_tier.name} ({self._get_tier_description(next_tier)}):**")
             
             # Check missing fields
+            missing_fields = []
             for field in next_requirements["required_fields"]:
                 if field not in field_analysis["present_fields"]:
-                    recommendations.append(f"  • Add {field}")
+                    missing_fields.append(field)
             
             # Check missing groups
+            missing_groups = []
             for group in next_requirements["required_groups"]:
                 if not field_analysis["group_satisfaction"][group]["satisfied"]:
-                    recommendations.append(f"  • Satisfy {group} requirements")
+                    missing_groups.append(group)
+            
+            # Add specific recommendations
+            if missing_fields:
+                for field in missing_fields:
+                    recommendations.append(f"  • **{field}**: {self._get_field_description(field)}")
+            
+            if missing_groups:
+                for group in missing_groups:
+                    recommendations.append(f"  • **{group}**: {self._get_group_description(group)}")
         
-        # Add specific quality improvements
+        # Add specific quality improvements for current fields
+        quality_issues = []
         for field, quality in field_analysis["field_quality"].items():
             if quality["issues"]:
-                recommendations.append(f"Improve {field}: {quality['issues'][0]}")
+                quality_issues.append(f"**{field}**: {quality['issues'][0]}")
+        
+        if quality_issues:
+            recommendations.append(f"\n**🔧 Quality Improvements for Current Fields:**")
+            for issue in quality_issues[:5]:  # Limit to top 5
+                recommendations.append(f"  • {issue}")
         
         return recommendations
+    
+    def _get_tier_description(self, tier: Tier) -> str:
+        """Get user-friendly description for each tier."""
+        descriptions = {
+            Tier.SPARSE: "Basic information",
+            Tier.MINIMAL: "Essential details with some documentation",
+            Tier.DETAILED: "Good coverage with comprehensive info",
+            Tier.COMPLETE: "Very comprehensive with rich metadata",
+            Tier.COMPREHENSIVE: "Exceptional quality with complete information"
+        }
+        return descriptions.get(tier, "Enhanced information")
+    
+    def _get_field_description(self, field: str) -> str:
+        """Get user-friendly description for missing fields."""
+        descriptions = {
+            "name": "Tool name/title",
+            "description": "Clear description of tool purpose",
+            "homepage": "Tool website or main page",
+            "biotoolsID": "Unique bio.tools identifier",
+            "topic": "Scientific topics/domains",
+            "function": "Scientific operations performed",
+            "toolType": "Type of software tool",
+            "operatingSystem": "Supported operating systems",
+            "language": "Programming language(s)",
+            "license": "Software license",
+            "link": "Additional links (download, documentation, etc.)",
+            "download": "Download information",
+            "documentation": "Documentation resources",
+            "publication": "Associated publications",
+            "credit": "Credits and acknowledgments",
+            "contact": "Contact information"
+        }
+        return descriptions.get(field, f"Add {field} information")
+    
+    def _get_group_description(self, group: str) -> str:
+        """Get user-friendly description for missing groups."""
+        descriptions = {
+            "basic_info": "Complete basic information (name, description, homepage)",
+            "scientific_info": "Scientific classification (topics, functions, tool type)",
+            "technical_info": "Technical details (OS, language, license)",
+            "resource_links": "Resource links (downloads, documentation)",
+            "attribution": "Attribution information (publications, credits, contacts)"
+        }
+        return descriptions.get(group, f"Complete {group} requirements")
     
     def _generate_summary(self, tier: Tier, score: float, field_analysis: Dict) -> str:
         """Generate human-readable summary."""

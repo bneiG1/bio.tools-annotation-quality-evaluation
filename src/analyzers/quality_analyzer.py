@@ -201,7 +201,7 @@ class QualityAnalyzer:
         
         # Generate recommendations
         recommendations, priority_fixes = self._generate_recommendations(
-            standards_analysis, schema_results, lint_issues
+            standards_analysis, completeness_analysis, schema_results, lint_issues
         )
         
         # Create summary
@@ -455,15 +455,21 @@ class QualityAnalyzer:
     def _generate_recommendations(
         self,
         standards_analysis: Dict,
+        completeness_analysis: Dict,
         schema_results: Dict,
         lint_issues: List[LintIssue]
     ) -> tuple[List[str], List[str]]:
-        """Generate recommendations and priority fixes."""
+        """Generate comprehensive recommendations and priority fixes."""
         recommendations = []
         priority_fixes = []
         
-        # Add standards recommendations
-        if standards_analysis.get("recommendations"):
+        # Use completeness recommendations as primary (more comprehensive)
+        if completeness_analysis.get("recommendations"):
+            recommendations.extend(completeness_analysis["recommendations"])
+        
+        # Add standards recommendations only if they provide additional value
+        elif standards_analysis.get("recommendations"):
+            # Use standards recommendations as fallback if completeness doesn't have any
             recommendations.extend(standards_analysis["recommendations"])
         
         # Add schema error fixes as priority
@@ -477,15 +483,21 @@ class QualityAnalyzer:
         
         # Add error lint issues as recommendations
         error_issues = [issue for issue in lint_issues if issue.level == IssueLevel.ERROR]
-        for issue in error_issues[:5]:  # Limit to top 5
-            recommendations.append(f"Fix: {issue.message}")
-            if issue.suggestion:
-                recommendations.append(f"  → {issue.suggestion}")
+        if error_issues:
+            recommendations.append(f"\n**🚨 Critical Issues to Fix:**")
+            for issue in error_issues[:5]:  # Limit to top 5
+                recommendations.append(f"  • **{issue.code}**: {issue.message}")
+                if issue.suggestion:
+                    recommendations.append(f"    → {issue.suggestion}")
         
-        # Add general improvement suggestions
+        # Add general improvement suggestions for warnings
         warning_issues = [issue for issue in lint_issues if issue.level == IssueLevel.WARNING]
         if len(warning_issues) > 3:
-            recommendations.append(f"Address {len(warning_issues)} warning issues to improve quality")
+            recommendations.append(f"\n**⚠️ Additional Improvements:**")
+            recommendations.append(f"  • Address {len(warning_issues)} warning issues for better quality")
+            # Show a few examples
+            for issue in warning_issues[:3]:
+                recommendations.append(f"    - {issue.message}")
         
         return recommendations, priority_fixes
     

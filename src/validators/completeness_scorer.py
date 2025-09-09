@@ -747,38 +747,100 @@ class ToolCompletenessScorer:
         return min(100.0, round(tier_score, 1))
 
     def _generate_recommendations(self, tier_results: Dict, field_analysis: Dict) -> List[str]:
-        """Generate recommendations for improving completeness."""
+        """Generate comprehensive recommendations for all tiers."""
         recommendations = []
         
-        # Find next achievable tier
+        # Find current highest achieved tier
         highest_tier = self._get_highest_tier(tier_results)
         
-        if highest_tier is None:
-            # No tier achieved, recommend SPARSE
-            next_tier = CompletnessTier.SPARSE
-        elif highest_tier.value < 5:
-            # Recommend next tier
-            next_tier = CompletnessTier(highest_tier.value + 1)
-        else:
-            # Already at highest tier
-            return ["Tool has achieved COMPREHENSIVE tier - excellent completeness!"]
-            
-        # Get missing fields for next tier
-        next_tier_result = tier_results[next_tier]
-        missing_fields = next_tier_result["missing_fields"]
+        if highest_tier and highest_tier.value == 5:
+            recommendations.append("🎉 Congratulations! Tool has achieved COMPREHENSIVE tier - excellent completeness!")
+            return recommendations
         
-        if missing_fields:
-            recommendations.append(f"To achieve {next_tier.name} tier, add the following fields:")
+        # Focus on next 2-3 tiers to avoid overwhelming users
+        start_tier = 1 if highest_tier is None else highest_tier.value + 1
+        max_tiers_to_show = min(3, 6 - start_tier)  # Show max 3 tiers ahead
+        
+        for i, tier_value in enumerate(range(start_tier, start_tier + max_tiers_to_show)):
+            if tier_value > 5:
+                break
+                
+            tier = CompletnessTier(tier_value)
+            tier_result = tier_results[tier]
+            missing_fields = tier_result["missing_fields"]
             
-            for field in missing_fields:
-                field_data = field_analysis.get(field, {})
-                issues = field_data.get("issues", [])
-                if issues:
-                    recommendations.append(f"  • {field}: {issues[0]}")
-                else:
-                    recommendations.append(f"  • {field}")
+            if missing_fields:
+                # Add priority indicator for next tier
+                priority_indicator = " 🎯 **NEXT GOAL**" if i == 0 else ""
+                recommendations.append(f"\n**📈 To achieve {tier.name} tier ({self._get_tier_description(tier)}):{priority_indicator}**")
+                
+                # Group fields by priority/difficulty for better UX
+                high_priority = []
+                medium_priority = []
+                
+                for field in missing_fields:
+                    field_data = field_analysis.get(field, {})
+                    issues = field_data.get("issues", [])
+                    description = self._get_field_description(field)
+                    
+                    # Determine if this is a high-priority/easy field
+                    if field in ["publication", "license", "operatingSystem", "language"]:
+                        if issues:
+                            high_priority.append(f"  • **{field}**: {issues[0]}")
+                        else:
+                            high_priority.append(f"  • **{field}**: {description}")
+                    else:
+                        if issues:
+                            medium_priority.append(f"  • **{field}**: {issues[0]}")
+                        else:
+                            medium_priority.append(f"  • **{field}**: {description}")
+                
+                # Add high priority items first
+                recommendations.extend(high_priority)
+                recommendations.extend(medium_priority)
+                
+                # Add helpful tip for next tier only
+                if i == 0:
+                    recommendations.append(f"  💡 *Complete these {len(missing_fields)} fields to reach {tier.name} tier*")
                     
         return recommendations
+    
+    def _get_tier_description(self, tier: CompletnessTier) -> str:
+        """Get user-friendly description for each tier."""
+        descriptions = {
+            CompletnessTier.SPARSE: "Basic tool information",
+            CompletnessTier.MINIMAL: "Essential details for findability", 
+            CompletnessTier.DETAILED: "Comprehensive tool information",
+            CompletnessTier.COMPLETE: "Full metadata with accessibility info",
+            CompletnessTier.COMPREHENSIVE: "Complete with quality metrics"
+        }
+        return descriptions.get(tier, "Enhanced tool information")
+    
+    def _get_field_description(self, field: str) -> str:
+        """Get user-friendly description for missing fields."""
+        descriptions = {
+            "name": "Tool name/title",
+            "description": "Clear description of tool purpose", 
+            "homepage": "Tool website URL",
+            "biotoolsID": "Unique bio.tools identifier",
+            "toolType": "Type of tool (e.g., Command-line tool, Web application)",
+            "topic": "Scientific topics/domains the tool addresses",
+            "publication": "Associated publication(s)",
+            "support": "Support information (help desk, documentation, etc.)",
+            "function": "Scientific operations the tool performs",
+            "documentation": "Documentation resources (manual, tutorial, etc.)",
+            "operatingSystem": "Supported operating systems",
+            "language": "Programming language(s)",
+            "license": "Software license information",
+            "input_output": "Data input and output formats/types",
+            "accessibility": "Tool accessibility information",
+            "code_availability": "Source code availability",
+            "downloads": "Download statistics/information", 
+            "supported_data_formats": "Specific supported file formats",
+            "scientific_benchmark": "Scientific benchmarking information",
+            "technical_monitoring": "Technical monitoring/uptime data"
+        }
+        return descriptions.get(field, f"Add {field} information")
 
     def _generate_summary(self, achieved_tier: Optional[CompletnessTier], 
                          completeness_score: float, tier_results: Dict) -> str:
