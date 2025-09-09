@@ -10,11 +10,19 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
 from datetime import datetime
 
-from ..validators.schema_validator import ExtendedSchemaValidator
-from ..validators.standards_scorer import ToolInformationStandardsScorer, Tier
-from ..validators.completeness_scorer import ToolCompletenessScorer, CompletnessTier
-from ..analyzers.linter import BiotoolsLinter, LintIssue, IssueLevel
-from ..utils.data_cleaner import ToolDataCleaner
+try:
+    from ..validators.schema_validator import ExtendedSchemaValidator
+    from ..validators.standards_scorer import ToolInformationStandardsScorer, Tier
+    from ..validators.completeness_scorer import ToolCompletenessScorer, CompletnessTier
+    from ..analyzers.linter import BiotoolsLinter, LintIssue, IssueLevel
+    from ..utils.data_cleaner import ToolDataCleaner
+except ImportError:
+    # Handle when module is run directly or imported without package context
+    from validators.schema_validator import ExtendedSchemaValidator
+    from validators.standards_scorer import ToolInformationStandardsScorer, Tier
+    from validators.completeness_scorer import ToolCompletenessScorer, CompletnessTier
+    from analyzers.linter import BiotoolsLinter, LintIssue, IssueLevel
+    from utils.data_cleaner import ToolDataCleaner
 
 logger = logging.getLogger(__name__)
 

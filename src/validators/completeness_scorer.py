@@ -9,7 +9,11 @@ based on presence and quality of the required attributes.
 from typing import Dict, List, Optional, Set, Tuple, Any
 from enum import Enum
 import logging
-from ..utils.logger import Logger
+
+try:
+    from ..utils.logger import Logger
+except ImportError:
+    from utils.logger import Logger
 
 logger = Logger.get_logger(__name__)
 

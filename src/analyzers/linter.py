@@ -103,13 +103,25 @@ class BiotoolsLinter:
             return False
             
         try:
-            # Try importing the main linter modules
-            import lib
-            import message
-            from rules import delegate_key_value_filter, delegate_whole_json_filter
-            from utils import flatten_json_to_single_dict, sanity_check_json
+            # Try importing the main linter modules using importlib for dynamic imports
+            import importlib.util
+            
+            # Check if main modules exist
+            lib_spec = importlib.util.find_spec("lib")
+            message_spec = importlib.util.find_spec("message")
+            rules_spec = importlib.util.find_spec("rules")
+            utils_spec = importlib.util.find_spec("utils")
+            
+            if not all([lib_spec, message_spec, rules_spec, utils_spec]):
+                return False
+                
+            # Try actual imports
+            import lib  # type: ignore
+            import message  # type: ignore
+            from rules import delegate_key_value_filter, delegate_whole_json_filter  # type: ignore
+            from utils import flatten_json_to_single_dict, sanity_check_json  # type: ignore
             return True
-        except ImportError as e:
+        except (ImportError, ModuleNotFoundError) as e:
             logger.warning(f"Failed to import linter modules: {e}")
             return False
     
@@ -143,11 +155,18 @@ class BiotoolsLinter:
     
     async def _lint_tool_async(self, tool_data: Dict) -> List[LintIssue]:
         """Async implementation of tool linting."""
-        # Import here to avoid issues if linter is not available
-        from lib import Session
-        from utils import sanity_check_json, flatten_json_to_single_dict
-        from rules import delegate_key_value_filter, delegate_whole_json_filter
-        from message import Message
+        if not self._linter_available:
+            return []
+            
+        try:
+            # Import here to avoid issues if linter is not available
+            from lib import Session  # type: ignore
+            from utils import sanity_check_json, flatten_json_to_single_dict  # type: ignore
+            from rules import delegate_key_value_filter, delegate_whole_json_filter  # type: ignore
+            from message import Message  # type: ignore
+        except (ImportError, ModuleNotFoundError) as e:
+            logger.warning(f"Failed to import linter modules in async function: {e}")
+            return []
         
         issues = []
         
@@ -230,6 +249,11 @@ class BiotoolsLinter:
         for result in completed_tasks:
             if isinstance(result, Exception):
                 logger.error(f"Error in batch linting task: {result}")
+                continue
+            
+            # Ensure result is a tuple with two elements
+            if not isinstance(result, tuple) or len(result) != 2:
+                logger.error(f"Invalid result format: {result}")
                 continue
                 
             tool_id, issues = result

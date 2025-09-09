@@ -13,7 +13,11 @@ from urllib.request import urlopen
 
 import jsonschema
 from jsonschema import Draft4Validator, validators
-from ..utils.logger import Logger
+
+try:
+    from ..utils.logger import Logger
+except ImportError:
+    from utils.logger import Logger
 
 logger = Logger.get_logger(__name__)
 

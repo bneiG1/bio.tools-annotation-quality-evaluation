@@ -8,7 +8,11 @@ for evaluating tool metadata completeness and quality.
 from typing import Dict, List, Optional, Set, Tuple
 from enum import Enum
 import logging
-from ..utils.logger import Logger
+
+try:
+    from ..utils.logger import Logger
+except ImportError:
+    from utils.logger import Logger
 
 logger = Logger.get_logger(__name__)
 

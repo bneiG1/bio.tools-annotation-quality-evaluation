@@ -5,6 +5,9 @@ pandas>=1.5.0
 plotly>=5.0.0
 pyyaml>=6.0
 
+# Async HTTP client for parallel processing
+aiohttp>=3.8.0
+
 # Streamlit for web interface
 streamlit>=1.49.0
 boltons
@@ -16,6 +19,9 @@ openpyxl>=3.0.0
 # CLI dependencies
 click>=8.0.0
 argparse
+
+# System monitoring (optional, for auto-tuning)
+psutil>=5.9.0
 
 # Linter dependencies (used by biotools-linter submodule)
 owlready2

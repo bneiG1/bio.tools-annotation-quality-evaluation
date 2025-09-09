@@ -25,12 +25,16 @@ sys.path.append(str(Path(__file__).parent / 'src'))
 
 # Import our analysis modules
 try:
-    from src.collectors.biotools_api import BioToolsAPIClient
+    from src.collectors.async_biotools_api import UnifiedBioToolsAPIClient
     from src.analyzers.quality_analyzer import QualityAnalyzer, QualityReport
     from src.reporters.quality_reporter import QualityReporter
     from src.utils.logger import Logger
+    
+    # Get logger instance
+    logger = Logger.get_logger(__name__)
+    
     MODULES_AVAILABLE = True
-    BioToolsAPIClientType = BioToolsAPIClient
+    BioToolsAPIClientType = UnifiedBioToolsAPIClient
     QualityAnalyzerType = QualityAnalyzer
     QualityReporterType = QualityReporter
 except ImportError as e:
@@ -39,6 +43,7 @@ except ImportError as e:
     BioToolsAPIClientType = None
     QualityAnalyzerType = None
     QualityReporterType = None
+    logger = logging.getLogger(__name__)  # Fallback logger
 
 # Configure Streamlit page
 st.set_page_config(
@@ -808,12 +813,36 @@ class LiveBioToolsAnalyzer:
         """Get the total number of tools in bio.tools registry."""
         try:
             api_client = _self.get_api_client()
-            # Make a search request with minimal results to get the total count
-            result = api_client.list_tools(page=1, query="*")
-            return result.get('count', 30000)  # Fallback to a reasonable default
+            
+            # Make a direct request to bio.tools API to get the total count
+            if hasattr(api_client, '_session'):
+                from urllib.parse import urljoin
+                
+                url = urljoin("https://bio.tools/api/", "tool/")
+                params = {'format': 'json', 'page': 1, 'page_size': 1}  # Minimal request
+                
+                try:
+                    response = api_client._session.get(url, params=params, timeout=10)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if 'count' in data:
+                            count = data['count']
+                            logger.info(f"Retrieved total bio.tools count: {count}")
+                            return count
+                        else:
+                            logger.warning("No count field in bio.tools API response")
+                    else:
+                        logger.warning(f"bio.tools API request failed: HTTP {response.status_code}")
+                except Exception as e:
+                    logger.debug(f"Direct API count request failed: {e}")
+            
+            # Fallback to known approximate count (as of September 2024)
+            logger.info("Using fallback count estimate")
+            return 30538
+            
         except Exception as e:
-            st.warning(f"Could not fetch total bio.tools count: {e}")
-            return 30000  # Fallback default
+            logger.warning(f"Could not fetch total bio.tools count: {e}")
+            return 30538  # Fallback default
     
     @st.cache_data(ttl=300)  # Cache for 5 minutes
     def fetch_tool_data(_self, tool_id: str):
@@ -821,7 +850,7 @@ class LiveBioToolsAnalyzer:
         try:
             api_client = _self.get_api_client()
             
-            result = api_client.get_tool(tool_id)
+            result = api_client.fetch_tool(tool_id)
             
             return result
         except Exception as e:
@@ -830,39 +859,49 @@ class LiveBioToolsAnalyzer:
     
     @st.cache_data(ttl=300)
     def search_tools(_self, query: str, max_tools: int = 10, sort_by: str = "lastUpdate", sort_order: str = "desc"):
-        """Search for tools using bio.tools API with caching."""
+        """Search for tools using bio.tools API with caching and pagination support."""
         try:
             api_client = _self.get_api_client()
             
-            # Calculate number of pages needed
-            tools_per_page = 25  # bio.tools API default
-            pages_needed = (max_tools + tools_per_page - 1) // tools_per_page
-            
-            all_tools = []
-            
-            for page in range(1, pages_needed + 1):
-                result = api_client.list_tools(
-                    page=page,
-                    query=query,
-                    sort=sort_by,
-                    order=sort_order
-                )
+            # If requesting a large number of tools or all tools, use fetch_all_tools
+            if max_tools > 100 or query == "*":
+                logger.info(f"Large request detected ({max_tools} tools), using fetch_all_tools with pagination")
                 
-                tools = result.get('list', [])
-                all_tools.extend(tools)
-                
-                # Stop if we have enough tools
-                if len(all_tools) >= max_tools:
-                    break
-                
-                # Stop if no more tools available
-                if len(tools) < tools_per_page:
-                    break
+                if hasattr(api_client, 'fetch_all_tools'):
+                    # Use the pagination method for large requests
+                    all_tools = api_client.fetch_all_tools(batch_size=min(1000, max_tools))
+                    
+                    # Apply query filtering if needed (since fetch_all_tools gets everything)
+                    if query and query != "*":
+                        # Simple filtering - in a real implementation you'd want more sophisticated search
+                        filtered_tools = []
+                        query_lower = query.lower()
+                        for tool in all_tools:
+                            tool_text = f"{tool.get('name', '')} {tool.get('description', '')}".lower()
+                            if query_lower in tool_text:
+                                filtered_tools.append(tool)
+                        all_tools = filtered_tools
+                    
+                    # Apply limit
+                    if max_tools and len(all_tools) > max_tools:
+                        all_tools = all_tools[:max_tools]
+                    
+                    logger.info(f"Retrieved {len(all_tools)} tools using pagination")
+                    return all_tools
+                else:
+                    logger.warning("fetch_all_tools method not available, falling back to search_tools")
             
-            return all_tools[:max_tools]
+            # For smaller requests, use the regular search method
+            all_tools = api_client.search_tools(
+                query=query,
+                limit=max_tools
+            )
+            
+            return all_tools[:max_tools] if all_tools else []
             
         except Exception as e:
             st.error(f"Error searching tools: {str(e)}")
+            logger.error(f"Error in search_tools: {e}")
             return []
     
     def analyze_tool_quality(self, tool_data: dict) -> Optional[dict]:
@@ -1076,14 +1115,14 @@ class LiveBioToolsAnalyzer:
             progress_bar.progress(10)
             
             api_client = self.get_api_client()
-            response = api_client.search_by_collection(
-                collection_id=collection_id,
-                size=max_tools
+            # Use search_tools with domain filter as approximation for collection search
+            tools = api_client.search_tools(
+                domain=collection_id,  # Use collection_id as domain filter
+                limit=max_tools
             )
             
             # Extract tools from API response
-            tools = response.get('list', []) if response else []
-            total_count = response.get('count', 0) if response else 0
+            total_count = len(tools) if tools else 0
             
             if not tools:
                 st.warning(f"No tools found in collection '{collection_id}'. Please check the collection ID.")
@@ -1105,7 +1144,7 @@ class LiveBioToolsAnalyzer:
                     status_text.text(f"🔍 Analyzing tool {i+1}/{len(tools)}: {tool.get('name', 'Unknown')}")
                     
                     # Get full tool data
-                    full_tool = api_client.get_tool(tool['biotoolsID'])
+                    full_tool = api_client.fetch_tool(tool['biotoolsID'])
                     
                     if full_tool:
                         # Run quality analysis

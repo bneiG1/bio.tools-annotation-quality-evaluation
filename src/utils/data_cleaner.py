@@ -9,7 +9,11 @@ same approach used in the official bio.tools registry.
 import logging
 from typing import Any, Dict, List, Union
 from boltons.iterutils import remap
-from .logger import Logger
+
+try:
+    from .logger import Logger
+except ImportError:
+    from logger import Logger
 
 logger = Logger.get_logger(__name__)
 

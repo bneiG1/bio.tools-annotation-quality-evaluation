@@ -1,43 +1,63 @@
 #!/usr/bin/env python3
 """
-Bio.tools Quality Analysis CLI
+Unified Bio.tools Quality Analysis CLI
 
 Command-line interface for fetching bio.tools data and generating quality reports
-in multiple formats (JSON, CSV, Excel).
+with support for both sequential and parallel processing modes.
 """
 
 import argparse
 import sys
 import json
 import logging
+import time
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 import asyncio
 
 import pandas as pd
 
-# Add src to path for imports
-src_path = Path(__file__).parent
-sys.path.insert(0, str(src_path))
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 try:
-    from collectors.biotools_api import BioToolsAPIClient
-    from analyzers.quality_analyzer import QualityAnalyzer, QualityReport
-    from reporters.quality_reporter import QualityReporter
-    from utils.logger import Logger
+    from src.collectors.async_biotools_api import UnifiedBioToolsAPIClient, create_async_client
+    from src.analyzers.quality_analyzer import QualityAnalyzer, QualityReport
+    from src.reporters.quality_reporter import QualityReporter
+    from src.utils.logger import Logger
+    
+    # Parallel processing imports (optional)
+    try:
+        from src.utils.parallel_config import ParallelProcessingConfig, create_optimal_config
+        from src.utils.processing_pipeline import ProcessingPipeline, PipelineProgress
+        from src.analyzers.parallel_processor import ParallelQualityProcessor
+        PARALLEL_AVAILABLE = True
+    except ImportError as e:
+        logger = logging.getLogger(__name__)
+        logger.info(f"Parallel processing not available: {e}")
+        PARALLEL_AVAILABLE = False
+        # Set defaults to avoid NameError
+        ParallelProcessingConfig = None
+        create_optimal_config = None
+        ProcessingPipeline = None
+        PipelineProgress = None
+        ParallelQualityProcessor = None
+        
 except ImportError as e:
     print(f"Import error: {e}")
     print("Please ensure all required modules are available in the src directory.")
     sys.exit(1)
 
 
-class BioToolsCLI:
-    """Command-line interface for bio.tools quality analysis."""
+class UnifiedBioToolsCLI:
+    """Unified command-line interface supporting both sequential and parallel processing."""
     
     def __init__(self):
         self.setup_logging()
         self.logger = logging.getLogger(__name__)
+        self.config: Optional[Any] = None  # Use Any to avoid type checking issues
         
     def setup_logging(self):
         """Configure logging for CLI usage."""
@@ -64,72 +84,216 @@ class BioToolsCLI:
         
         return dirs
     
-    def fetch_tool_data(self, 
-                       tool_ids: Optional[List[str]] = None,
-                       search_query: Optional[str] = None,
-                       domain: Optional[str] = None,
-                       format_filter: Optional[str] = None,
-                       limit: Optional[int] = None,
-                       cache_dir: Optional[Path] = None) -> List[Dict]:
-        """Fetch tool data from bio.tools API."""
-        
-        self.logger.info("Initializing bio.tools API client...")
-        client = BioToolsAPIClient(cache_dir=cache_dir)
-        
-        tools_data = []
-        
+    def setup_parallel_config(self, args) -> Optional[Any]:
+        """Setup parallel processing configuration based on CLI arguments."""
+        if not PARALLEL_AVAILABLE or not args.use_parallel:
+            return None
+            
         try:
-            if tool_ids:
-                self.logger.info(f"Fetching {len(tool_ids)} specific tools...")
-                for tool_id in tool_ids:
-                    self.logger.info(f"Fetching tool: {tool_id}")
-                    tool_data = client.get_tool(tool_id)
-                    if tool_data:
-                        tools_data.append(tool_data)
-                    else:
-                        self.logger.warning(f"Tool not found: {tool_id}")
-            
-            elif search_query or domain or format_filter:
-                self.logger.info("Performing search query...")
-                search_params = {}
-                if search_query:
-                    search_params['query'] = search_query
-                if domain:
-                    search_params['domain'] = domain
-                if format_filter:
-                    search_params['format'] = format_filter
+            # Guard against missing modules
+            if ParallelProcessingConfig is None or create_optimal_config is None:
+                self.logger.warning("Parallel processing modules not available")
+                return None
                 
-                # Get search results using list_tools method
-                search_response = client.list_tools(**search_params)
-                search_results = search_response.get('list', [])
-                total_found = len(search_results)
-                self.logger.info(f"Found {total_found} tools matching criteria")
-                
-                # Apply limit if specified
-                if limit and limit < total_found:
-                    search_results = search_results[:limit]
-                    self.logger.info(f"Limited to first {limit} tools")
-                
-                tools_data = search_results
-            
+            if args.parallel_preset:
+                if args.parallel_preset == "conservative":
+                    config = ParallelProcessingConfig.create_conservative()
+                elif args.parallel_preset == "aggressive":
+                    config = ParallelProcessingConfig.create_aggressive()
+                elif args.parallel_preset == "auto":
+                    config = create_optimal_config("auto", "balanced")
+                else:
+                    config = ParallelProcessingConfig.create_default()
             else:
-                self.logger.error("No search criteria provided. Use --tool-id, --search, --domain, or --format")
-                return []
-            
-            self.logger.info(f"Successfully fetched {len(tools_data)} tools")
-            return tools_data
-            
-        except Exception as e:
-            self.logger.error(f"Error fetching data: {e}")
+                config = ParallelProcessingConfig.create_default()
+        except (NameError, AttributeError) as e:
+            self.logger.warning(f"Parallel processing configuration failed: {e}")
+            return None
+        
+        # Override with CLI arguments
+        if args.max_concurrent_api:
+            config.max_concurrent_api_requests = args.max_concurrent_api
+        if args.max_concurrent_analysis:
+            config.max_concurrent_analyses = args.max_concurrent_analysis
+        if args.api_rate_limit:
+            config.api_rate_limit_delay = args.api_rate_limit
+        if args.batch_size:
+            config.analysis_batch_size = args.batch_size
+        if args.disable_pipeline:
+            config.enable_pipeline_mode = False
+        
+        # Validate configuration
+        if not config.validate():
+            self.logger.error("Invalid parallel processing configuration")
+            sys.exit(1)
+        
+        self.logger.info(f"Using parallel configuration: {config}")
+        return config
+    
+    def progress_callback(self, progress: Any) -> None:
+        """Handle pipeline progress updates."""
+        if hasattr(progress, 'total') and progress.total > 0:
+            fetch_pct = (progress.fetched / progress.total) * 100
+            process_pct = (progress.processed / progress.total) * 100
+            self.logger.info(f"Progress - Phase: {progress.phase}, "
+                           f"Fetched: {progress.fetched}/{progress.total} ({fetch_pct:.1f}%), "
+                           f"Processed: {progress.processed}/{progress.total} ({process_pct:.1f}%)")
+    
+    def error_callback(self, error_msg: str) -> None:
+        """Handle pipeline errors."""
+        self.logger.error(f"Pipeline error: {error_msg}")
+    
+    async def fetch_and_analyze_parallel(
+        self,
+        tool_ids: Optional[List[str]] = None,
+        search_query: Optional[str] = None,
+        domain: Optional[str] = None,
+        format_filter: Optional[str] = None,
+        limit: Optional[int] = None,
+        cache_dir: Optional[Path] = None
+    ) -> List[QualityReport]:
+        """Fetch and analyze tools using parallel processing."""
+        
+        if not PARALLEL_AVAILABLE or ProcessingPipeline is None:
+            self.logger.error("Parallel processing not available")
             return []
+        
+        # Determine which tools to process
+        if tool_ids:
+            target_tools = tool_ids
+        else:
+            # Use async client to search for tools
+            async with create_async_client(self.config, cache_dir) as client:
+                tools_data = await client.search_tools(
+                    query=search_query,
+                    domain=domain,
+                    format_filter=format_filter,
+                    limit=limit
+                )
+                target_tools = [tool.get('biotoolsID') for tool in tools_data if tool.get('biotoolsID')]
+        
+        # Filter out None values and ensure all are strings
+        target_tools = [tool_id for tool_id in target_tools if tool_id and isinstance(tool_id, str)]
+        
+        if not target_tools:
+            self.logger.error("No tools found to process")
+            return []
+        
+        # Create and run processing pipeline
+        with ProcessingPipeline(
+            config=self.config,
+            cache_dir=cache_dir
+        ) as pipeline:
+            
+            # Add callbacks for progress tracking
+            pipeline.add_progress_callback(self.progress_callback)
+            pipeline.add_error_callback(self.error_callback)
+            
+            # Process tools
+            reports = await pipeline.process_tool_ids(target_tools)
+            
+            # Log final statistics
+            stats = pipeline.get_stats()
+            self.logger.info(f"Processing complete - Total: {stats.total_tools}, "
+                           f"Successful: {stats.successful_analyses}, "
+                           f"Time: {stats.total_time:.2f}s, "
+                           f"Throughput: {stats.throughput:.1f} tools/sec")
+            
+            return reports
+    
+    
+    def fetch_and_analyze_sequential(
+        self,
+        tool_ids: Optional[List[str]] = None,
+        search_query: Optional[str] = None,
+        domain: Optional[str] = None,
+        format_filter: Optional[str] = None,
+        limit: Optional[int] = None,
+        fetch_all: bool = False,
+        batch_size_fetch: int = 1000,
+        cache_dir: Optional[Path] = None
+    ) -> List[QualityReport]:
+        """Fetch and analyze tools using sequential processing (fallback)."""
+        
+        self.logger.info("Using sequential processing mode")
+        
+        # Use the unified sequential client
+        with UnifiedBioToolsAPIClient(cache_dir=cache_dir) as client:
+            tools_data = []
+            
+            try:
+                if fetch_all:
+                    self.logger.info("Fetching ALL bio.tools entries...")
+                    tools_data = client.fetch_all_tools(batch_size=batch_size_fetch)
+                    self.logger.info(f"Successfully fetched {len(tools_data)} total tools")
+                
+                elif tool_ids:
+                    self.logger.info(f"Fetching {len(tool_ids)} specific tools...")
+                    for tool_id in tool_ids:
+                        self.logger.info(f"Fetching tool: {tool_id}")
+                        tool_data = client.fetch_tool(tool_id)
+                        if tool_data:
+                            tools_data.append(tool_data)
+                        else:
+                            self.logger.warning(f"Tool not found: {tool_id}")
+                
+                elif search_query or domain or format_filter:
+                    self.logger.info("Performing search query...")
+                    
+                    # Get search results using search_tools method
+                    search_results = client.search_tools(
+                        query=search_query,
+                        domain=domain,
+                        format_filter=format_filter,
+                        limit=limit
+                    )
+                    total_found = len(search_results)
+                    self.logger.info(f"Found {total_found} tools matching criteria")
+                    
+                    tools_data = search_results
+                
+                else:
+                    self.logger.error("No search criteria provided")
+                    return []
+                
+                # Save raw data
+                if tools_data:
+                    self.save_raw_data(tools_data, Path("./data/raw"))
+                
+                self.logger.info(f"Successfully fetched {len(tools_data)} tools")
+                
+                # Analyze tools sequentially
+                analyzer = QualityAnalyzer()
+                reports = []
+                
+                for i, tool_data in enumerate(tools_data, 1):
+                    tool_id = tool_data.get('biotoolsID', f'unknown_{i}')
+                    self.logger.info(f"Analyzing tool {i}/{len(tools_data)}: {tool_id}")
+                    
+                    try:
+                        report = analyzer.analyze_tool(tool_data)
+                        reports.append(report)
+                    except Exception as e:
+                        self.logger.error(f"Error analyzing tool {tool_id}: {e}")
+                        continue
+                
+                self.logger.info(f"Analysis complete. Generated {len(reports)} reports")
+                return reports
+                
+            except Exception as e:
+                self.logger.error(f"Error in sequential processing: {e}")
+                return []
+    
     
     def save_raw_data(self, tools_data: List[Dict], output_dir: Path, filename_prefix: str = "biotools_raw") -> Path:
-        """Save raw tool data to JSON file."""
+        """Save raw tool data to JSON file and individual tool files."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{filename_prefix}_{timestamp}.json"
-        filepath = output_dir / filename
         
-        with open(filepath, 'w', encoding='utf-8') as f:
+        # Save bulk data
+        bulk_filename = f"{filename_prefix}_{timestamp}.json"
+        bulk_filepath = output_dir / bulk_filename
+        
+        with open(bulk_filepath, 'w', encoding='utf-8') as f:
             json.dump({
                 'metadata': {
                     'fetched_at': datetime.now().isoformat(),
@@ -139,8 +303,49 @@ class BioToolsCLI:
                 'tools': tools_data
             }, f, indent=2, ensure_ascii=False)
         
-        self.logger.info(f"Raw data saved to: {filepath}")
-        return filepath
+        self.logger.info(f"Raw bulk data saved to: {bulk_filepath}")
+        
+        # Save individual tool files
+        individual_dir = output_dir / f"individual_tools_{timestamp}"
+        individual_dir.mkdir(exist_ok=True)
+        
+        self.logger.info(f"Saving individual tool files to: {individual_dir}")
+        for i, tool_data in enumerate(tools_data, 1):
+            tool_id = tool_data.get('biotoolsID', f'unknown_{i}')
+            # Clean tool_id for filename
+            safe_tool_id = "".join(c for c in tool_id if c.isalnum() or c in ('_', '-', '.')).rstrip()
+            tool_filename = f"{safe_tool_id}.json"
+            tool_filepath = individual_dir / tool_filename
+            
+            with open(tool_filepath, 'w', encoding='utf-8') as f:
+                json.dump(tool_data, f, indent=2, ensure_ascii=False)
+            
+            if i % 1000 == 0:
+                self.logger.info(f"Saved {i}/{len(tools_data)} individual tool files")
+        
+        self.logger.info(f"All individual tool files saved to: {individual_dir}")
+        return bulk_filepath
+    
+    def export_results(self, reports: List[QualityReport], dirs: Dict[str, Path], export_formats: List[str]) -> None:
+        """Export results in specified formats."""
+        if not reports:
+            self.logger.warning("No reports to export")
+            return
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        for fmt in export_formats:
+            if fmt == 'csv' or fmt == 'all':
+                csv_path = dirs['exports'] / f"biotools_quality_{timestamp}.csv"
+                self.export_to_csv(reports, csv_path)
+            
+            if fmt == 'excel' or fmt == 'all':
+                excel_path = dirs['exports'] / f"biotools_quality_{timestamp}.xlsx"
+                self.export_to_excel(reports, excel_path)
+            
+            if fmt == 'json' or fmt == 'all':
+                json_path = dirs['exports'] / f"biotools_quality_{timestamp}.json"
+                self.export_to_json(reports, json_path)
     
     def analyze_tools(self, tools_data: List[Dict]) -> List[QualityReport]:
         """Analyze tools and generate quality reports."""
@@ -302,79 +507,147 @@ class BioToolsCLI:
         
         self.logger.info(f"JSON export saved to: {output_path}")
     
-    def run(self, args):
-        """Main CLI execution logic."""
-        self.logger.info("Starting bio.tools quality analysis CLI")
+    async def run_async(self, args):
+        """Main async CLI execution logic."""
+        self.logger.info("Starting unified bio.tools quality analysis CLI")
+        
+        # Setup parallel processing configuration
+        self.config = self.setup_parallel_config(args)
         
         # Create output directories
         output_base = Path(args.output_dir)
         dirs = self.create_output_dirs(output_base)
         
-        # Fetch data
+        # Setup cache directory
         cache_dir = dirs['raw'] / 'cache' if args.cache else None
-        tools_data = self.fetch_tool_data(
-            tool_ids=args.tool_id,
-            search_query=args.search,
-            domain=args.domain, 
-            format_filter=args.format,
-            limit=args.limit,
-            cache_dir=cache_dir
-        )
         
-        if not tools_data:
-            self.logger.error("No tools found or fetched. Exiting.")
-            return 1
-        
-        # Save raw data
-        if args.save_raw:
-            raw_file = self.save_raw_data(tools_data, dirs['raw'])
-        
-        # Analyze tools
-        if args.analyze:
-            reports = self.analyze_tools(tools_data)
+        try:
+            # Fetch and analyze data
+            if args.use_parallel and PARALLEL_AVAILABLE:
+                reports = await self.fetch_and_analyze_parallel(
+                    tool_ids=args.tool_id,
+                    search_query=args.search,
+                    domain=args.domain,
+                    format_filter=args.format,
+                    limit=args.limit,
+                    cache_dir=cache_dir
+                )
+            else:
+                if args.use_parallel and not PARALLEL_AVAILABLE:
+                    self.logger.warning("Parallel processing requested but not available, using sequential mode")
+                reports = self.fetch_and_analyze_sequential(
+                    tool_ids=args.tool_id,
+                    search_query=args.search,
+                    domain=args.domain,
+                    format_filter=args.format,
+                    limit=args.limit,
+                    fetch_all=args.all,
+                    batch_size_fetch=args.batch_size_fetch,
+                    cache_dir=cache_dir
+                )
             
             if not reports:
                 self.logger.error("No analysis reports generated. Exiting.")
                 return 1
             
-            # Generate timestamp for export files
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # Export results
+            export_formats = []
+            if args.export_csv:
+                export_formats.append('csv')
+            if args.export_excel:
+                export_formats.append('excel')
+            if args.export_json:
+                export_formats.append('json')
+            if args.export_all or not export_formats:
+                export_formats = ['all']
             
-            # Export to different formats
-            if args.export_csv or args.export_all:
-                csv_path = dirs['exports'] / f"biotools_quality_{timestamp}.csv"
-                self.export_to_csv(reports, csv_path)
+            self.export_results(reports, dirs, export_formats)
             
-            if args.export_excel or args.export_all:
-                excel_path = dirs['exports'] / f"biotools_quality_{timestamp}.xlsx"
-                self.export_to_excel(reports, excel_path)
+            self.logger.info("Unified CLI execution completed successfully")
+            return 0
             
-            if args.export_json or args.export_all:
-                json_path = dirs['exports'] / f"biotools_quality_{timestamp}.json"
-                self.export_to_json(reports, json_path)
-        
-        self.logger.info("CLI execution completed successfully")
-        return 0
+        except Exception as e:
+            self.logger.error(f"CLI execution failed: {e}")
+            return 1
+    
+    def run(self, args):
+        """Main CLI execution entry point."""
+        # Check if parallel processing is requested and available
+        if args.use_parallel and PARALLEL_AVAILABLE:
+            return asyncio.run(self.run_async(args))
+        else:
+            # For sequential mode, we don't need async
+            self.logger.info("Starting unified bio.tools quality analysis CLI (sequential mode)")
+            
+            # Create output directories
+            output_base = Path(args.output_dir)
+            dirs = self.create_output_dirs(output_base)
+            
+            # Setup cache directory
+            cache_dir = dirs['raw'] / 'cache' if args.cache else None
+            
+            try:
+                # Fetch and analyze data sequentially
+                reports = self.fetch_and_analyze_sequential(
+                    tool_ids=args.tool_id,
+                    search_query=args.search,
+                    domain=args.domain,
+                    format_filter=args.format,
+                    limit=args.limit,
+                    fetch_all=args.all,
+                    batch_size_fetch=args.batch_size_fetch,
+                    cache_dir=cache_dir
+                )
+                
+                if not reports:
+                    self.logger.error("No analysis reports generated. Exiting.")
+                    return 1
+                
+                # Export results
+                export_formats = []
+                if args.export_csv:
+                    export_formats.append('csv')
+                if args.export_excel:
+                    export_formats.append('excel')
+                if args.export_json:
+                    export_formats.append('json')
+                if args.export_all or not export_formats:
+                    export_formats = ['all']
+                
+                self.export_results(reports, dirs, export_formats)
+                
+                self.logger.info("Unified CLI execution completed successfully")
+                return 0
+                
+            except Exception as e:
+                self.logger.error(f"CLI execution failed: {e}")
+                return 1
 
 
 def create_parser():
-    """Create command-line argument parser."""
+    """Create command-line argument parser with unified features."""
     parser = argparse.ArgumentParser(
-        description="Bio.tools Quality Analysis CLI",
+        description="Unified Bio.tools Quality Analysis CLI with Sequential and Parallel Processing",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Fetch specific tools
-  python -m src.cli --tool-id blast --tool-id clustalw --analyze --export-all
+  # Fetch ALL biotools entries and export to all formats
+  python -m src.cli --all --export-all
   
-  # Search and analyze tools
-  python -m src.cli --search "alignment" --limit 10 --analyze --export-csv
+  # Sequential processing (default)
+  python -m src.cli --tool-id blast --tool-id clustalw --export-all
   
-  # Fetch by domain
-  python -m src.cli --domain "Genomics" --limit 50 --analyze --export-excel
+  # Parallel processing for better performance
+  python -m src.cli --search "alignment" --limit 50 --use-parallel --export-csv
   
-  # Just fetch raw data without analysis
-  python -m src.cli --search "phylogeny" --save-raw --no-analyze
+  # Auto-tuned parallel configuration
+  python -m src.cli --domain "Genomics" --limit 20 --use-parallel --parallel-preset auto
+  
+  # Conservative parallel settings for slower systems
+  python -m src.cli --search "phylogeny" --use-parallel --parallel-preset conservative
+  
+  # Custom parallel configuration
+  python -m src.cli --search "blast" --use-parallel --max-concurrent-api 3 --batch-size 5
         """
     )
     
@@ -390,17 +663,35 @@ Examples:
                            help='Filter by data format')
     fetch_group.add_argument('--limit', type=int, 
                            help='Limit number of tools to fetch')
+    fetch_group.add_argument('--all', action='store_true',
+                           help='Fetch ALL biotools entries (overrides other search options)')
+    fetch_group.add_argument('--batch-size-fetch', type=int, default=1000,
+                           help='Batch size for fetching all tools (default: 1000)')
+    
+    # Parallel processing options (only shown if available)
+    if PARALLEL_AVAILABLE:
+        parallel_group = parser.add_argument_group('Parallel Processing (Enhanced Performance)')
+        parallel_group.add_argument('--use-parallel', action='store_true',
+                                  help='Use parallel processing for improved performance')
+        parallel_group.add_argument('--parallel-preset', choices=['conservative', 'default', 'aggressive', 'auto'],
+                                  help='Use predefined parallel processing settings')
+        parallel_group.add_argument('--max-concurrent-api', type=int,
+                                  help='Maximum concurrent API requests')
+        parallel_group.add_argument('--max-concurrent-analysis', type=int,
+                                  help='Maximum concurrent analyses')
+        parallel_group.add_argument('--api-rate-limit', type=float,
+                                  help='Rate limit delay between API requests (seconds)')
+        parallel_group.add_argument('--batch-size', type=int,
+                                  help='Batch size for processing')
+        parallel_group.add_argument('--disable-pipeline', action='store_true',
+                                  help='Disable pipeline mode (process all fetching before analysis)')
     
     # Processing options
     process_group = parser.add_argument_group('Processing')
-    process_group.add_argument('--analyze', action='store_true', default=True,
-                             help='Perform quality analysis (default: True)')
-    process_group.add_argument('--no-analyze', dest='analyze', action='store_false',
-                             help='Skip quality analysis, only fetch raw data')
-    process_group.add_argument('--save-raw', action='store_true', default=True,
-                             help='Save raw API data (default: True)')
     process_group.add_argument('--cache', action='store_true', default=True,
                              help='Use local caching for API requests (default: True)')
+    process_group.add_argument('--no-cache', dest='cache', action='store_false',
+                             help='Disable caching')
     
     # Export options
     export_group = parser.add_argument_group('Export Formats')
@@ -427,14 +718,25 @@ def main():
     args = parser.parse_args()
     
     # Validation
-    if not any([args.tool_id, args.search, args.domain, args.format]):
-        parser.error("Must specify at least one of: --tool-id, --search, --domain, or --format")
+    if not any([args.tool_id, args.search, args.domain, args.format, args.all]):
+        parser.error("Must specify at least one of: --tool-id, --search, --domain, --format, or --all")
     
-    if args.analyze and not any([args.export_csv, args.export_excel, args.export_json, args.export_all]):
-        print("Warning: Analysis enabled but no export format specified. Results will not be saved.")
+    # Set default for parallel processing if not available
+    if not hasattr(args, 'use_parallel'):
+        args.use_parallel = False
+    
+    # Check for parallel processing availability
+    if hasattr(args, 'use_parallel') and args.use_parallel and not PARALLEL_AVAILABLE:
+        print("Warning: Parallel processing requested but dependencies not available.")
+        print("Please install: pip install aiohttp psutil")
+        print("Falling back to sequential mode.")
+        args.use_parallel = False
+    
+    if not any([args.export_csv, args.export_excel, args.export_json, args.export_all]):
+        print("Warning: No export format specified. Results will not be saved.")
     
     # Run CLI
-    cli = BioToolsCLI()
+    cli = UnifiedBioToolsCLI()
     return cli.run(args)
 
 
