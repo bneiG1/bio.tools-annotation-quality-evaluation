@@ -862,44 +862,18 @@ class LiveBioToolsAnalyzer:
         """Search for tools using bio.tools API with caching and pagination support."""
         try:
             api_client = _self.get_api_client()
-            
-            # If requesting a large number of tools or all tools, use fetch_all_tools
-            # Note: bio.tools API page size is 50, so use pagination for requests > 50
-            if max_tools > 50 or query == "*":
-                logger.info(f"Large request detected ({max_tools} tools), using fetch_all_tools with pagination")
-                
-                if hasattr(api_client, 'fetch_all_tools'):
-                    # Use the pagination method for large requests
-                    all_tools = api_client.fetch_all_tools(batch_size=min(1000, max_tools))
-                    
-                    # Apply query filtering if needed (since fetch_all_tools gets everything)
-                    if query and query != "*":
-                        # Simple filtering - in a real implementation you'd want more sophisticated search
-                        filtered_tools = []
-                        query_lower = query.lower()
-                        for tool in all_tools:
-                            tool_text = f"{tool.get('name', '')} {tool.get('description', '')}".lower()
-                            if query_lower in tool_text:
-                                filtered_tools.append(tool)
-                        all_tools = filtered_tools
-                    
-                    # Apply limit
-                    if max_tools and len(all_tools) > max_tools:
-                        all_tools = all_tools[:max_tools]
-                    
-                    logger.info(f"Retrieved {len(all_tools)} tools using pagination")
-                    return all_tools
-                else:
-                    logger.warning("fetch_all_tools method not available, falling back to search_tools")
-            
-            # For smaller requests, use the regular search method
-            all_tools = api_client.search_tools(
-                query=query,
+
+            # bio.tools treats the absence of `q` as "match everything", so translate empty
+            # or wildcard UI queries to None and let the API handle pagination internally.
+            query_param = None if not query or query == "*" else query
+
+            tools = api_client.search_tools(
+                query=query_param,
                 limit=max_tools
             )
-            
-            return all_tools[:max_tools] if all_tools else []
-            
+
+            return tools[:max_tools] if tools else []
+
         except Exception as e:
             st.error(f"Error searching tools: {str(e)}")
             logger.error(f"Error in search_tools: {e}")
